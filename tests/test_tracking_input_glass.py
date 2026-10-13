@@ -9,7 +9,7 @@ from pc.protocol import Hand
 from pc.controller.xinput import Mapper,Input,deadzone,XInput
 from pc.controller.manager import InputManager
 from pc.glassvr.adapter import packets,GlassVR
-from pc.glassvr.space import Space
+from pc.glassvr.space import Space,correct_head_relative_yaw
 
 def hand(side,x):
     p=np.full((21,3),.8);p[:,0]=x;return Hand(side,side,0,p)
@@ -100,3 +100,29 @@ def test_controllers_follow_hmd_forward_and_room_transform_applies_once():
     room_r=Rotation.from_euler('y',-.4).as_matrix();room_p=np.array([2,0,1])
     standing_head=room_r@head_p+room_p;standing_hand=room_r@hand_p+room_p
     np.testing.assert_allclose((room_r@head_r).T@(standing_hand-standing_head),[.1,-.05,-.5],atol=1e-12)
+
+def test_yaw_inversion_keeps_pitch_roll_and_is_reversible():
+    for yaw in (-1.1,-.4,0,.4,1.1):
+        expected=np.array([-yaw,.3,-.2]);r=Rotation.from_euler('YXZ',[yaw,.3,-.2])
+        corrected=correct_head_relative_yaw(r,True)
+        np.testing.assert_allclose(corrected.as_euler('YXZ'),expected,atol=1e-12)
+        np.testing.assert_allclose(correct_head_relative_yaw(corrected,True).as_matrix(),r.as_matrix(),atol=1e-12)
+        np.testing.assert_allclose(correct_head_relative_yaw(r,False).as_matrix(),r.as_matrix())
+
+def test_yaw_correction_does_not_change_positions_or_depend_on_room_heading():
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)
+    head=Rotation.from_euler('xyz',[.2,1.2,-.1]);s.history.append((10,head.as_matrix(),np.array([1.,2.,3.])))
+    desired=Rotation.from_euler('YXZ',[.6,.25,.1])
+    palm=Rotation.from_matrix(s.mount).inv()*desired
+    p0,q0=s.transform(np.array([.1,.05,.4]),palm.as_quat(),10,2)
+    cfg['invert_yaw']=True
+    p1,q1=s.transform(np.array([.1,.05,.4]),palm.as_quat(),10,2)
+    np.testing.assert_allclose(p1,p0,atol=1e-12)
+    relative=head.inv()*Rotation.from_quat(q1)
+    np.testing.assert_allclose(relative.as_euler('YXZ'),[-.6,.25,.1],atol=1e-12)
+
+def test_vertical_aim_stays_finite_without_changing_up_down():
+    for pitch in (-np.pi/2,np.pi/2):
+        r=Rotation.from_euler('YXZ',[1.,pitch,.2]);corrected=correct_head_relative_yaw(r,True)
+        np.testing.assert_allclose(corrected.apply([0,0,-1]),r.apply([0,0,-1]),atol=1e-12)
+        assert np.isfinite(corrected.as_quat()).all()
