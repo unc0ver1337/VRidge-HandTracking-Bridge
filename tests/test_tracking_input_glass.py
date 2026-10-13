@@ -88,3 +88,15 @@ def test_camera_openvr_transform_and_hmd_interpolation():
     s.history.extend([(10,np.eye(3),np.array([0,1,0])),(10.1,Rotation.from_euler('y',.2).as_matrix(),np.array([.1,1,0]))])
     r,p=s.pose_at(10.05);np.testing.assert_allclose(p,[.05,1,0]);np.testing.assert_allclose(Rotation.from_matrix(r).as_rotvec(),[0,.1,0],atol=1e-10)
     p,q=s.transform(np.array([0,0,.5]),[0,0,0,1],10,2);np.testing.assert_allclose(p,[0,1,-.5]);assert abs(np.linalg.norm(q)-1)<1e-10
+
+def test_controllers_follow_hmd_forward_and_room_transform_applies_once():
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)
+    head_r=Rotation.from_euler('y',.8).as_matrix();head_p=np.array([.2,1.4,-.3])
+    s.history.append((10,head_r,head_p))
+    hand_p,hand_q=s.transform(np.array([.1,.05,.5]),[0,0,0,1],10,2)
+    # Relative to the headset: camera right is head right, camera down is head
+    # down, camera forward is headset look direction (-Z), at every yaw.
+    np.testing.assert_allclose(head_r.T@(hand_p-head_p),[.1,-.05,-.5],atol=1e-12)
+    room_r=Rotation.from_euler('y',-.4).as_matrix();room_p=np.array([2,0,1])
+    standing_head=room_r@head_p+room_p;standing_hand=room_r@hand_p+room_p
+    np.testing.assert_allclose((room_r@head_r).T@(standing_hand-standing_head),[.1,-.05,-.5],atol=1e-12)

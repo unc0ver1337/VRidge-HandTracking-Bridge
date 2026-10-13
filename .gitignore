@@ -12,3 +12,4 @@ private/
 calibration.local.yaml
 artifacts/
 *.zip
+hardware.local.yaml

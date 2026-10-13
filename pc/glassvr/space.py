@@ -8,6 +8,8 @@ class Space:
 
     Camera: +X right,+Y down,+Z forward. OpenVR: +X right,+Y up,-Z forward.
     Camera mount translation is the camera centre expressed in HMD coordinates.
+    Driver UDP poses are RAW tracking coordinates. SteamVR applies its room/standing
+    transform afterwards; using Standing HMD samples here would apply it twice.
     """
     def __init__(self,config):
         self.config=config; self.history=deque(maxlen=300); self.stop=threading.Event(); self.lock=threading.Lock()
@@ -23,7 +25,7 @@ class Space:
         while not self.stop.is_set():
             try:
                 if not initialized: openvr.init(openvr.VRApplication_Background); initialized=True
-                poses=openvr.VRSystem().getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseStanding,0,openvr.k_unMaxTrackedDeviceCount)
+                poses=openvr.VRSystem().getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseRawAndUncalibrated,0,openvr.k_unMaxTrackedDeviceCount)
                 hmd=poses[openvr.k_unTrackedDeviceIndex_Hmd]
                 if hmd.bPoseIsValid and hmd.bDeviceIsConnected:
                     m=np.array(hmd.mDeviceToAbsoluteTracking.m,dtype=float)

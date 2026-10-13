@@ -24,7 +24,7 @@ Xbox 360 XInput → independent 10 ms input thread → GlassVR UDP
 1. Установите GlassVR из [официального проекта](https://github.com/DaniXmir/GlassVr). Используйте его установку драйвера; не заменяйте HMD VRidge эмулированным HMD GlassVR.
 2. В GlassVR включите оба Index controller, назначьте **position, rotation, input и skeletal = UDP** для каждой руки. Порт левой руки `9001`, правой `9002`. Отключите другие источники тех же каналов. Изменения конфигурации драйвера могут требовать перезапуска SteamVR.
 3. При совместном использовании драйверов установите `steamvr.activateMultipleDrivers: true` в `steamvr.vrsettings`, предварительно сохранив копию файла. Настройка относится к секции `steamvr`, а не к произвольной секции драйвера.
-4. Измерьте ладонь и крепление камеры; заполните `pc/config.yaml` по разделу калибровки ниже. HMD и GlassVR должны использовать один tracking universe `Standing`.
+4. Измерьте ладонь и крепление камеры; заполните `pc/config.yaml` по разделу калибровки ниже. Bridge получает HMD в `RawAndUncalibrated` и передаёт GlassVR raw driver poses; SteamVR применяет преобразование игровой зоны один раз. Для пользовательской диагностики используется `Standing`.
 5. Запустите `start-windows.cmd`. Первый запуск создаёт venv и устанавливает зависимости. Альтернативно:
 
 ```powershell
