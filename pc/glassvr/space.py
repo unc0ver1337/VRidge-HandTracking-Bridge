@@ -1,0 +1,57 @@
+import threading,time,logging
+from collections import deque
+import numpy as np
+from scipy.spatial.transform import Rotation
+
+class Space:
+    """Timestamped HMD history + measured rigid camera mount. SteamVR metres.
+
+    Camera: +X right,+Y down,+Z forward. OpenVR: +X right,+Y up,-Z forward.
+    Camera mount translation is the camera centre expressed in HMD coordinates.
+    """
+    def __init__(self,config):
+        self.config=config; self.history=deque(maxlen=300); self.stop=threading.Event(); self.lock=threading.Lock()
+        self.mount=Rotation.from_euler('xyz',config['camera_rotation_deg'],degrees=True).as_matrix()@np.diag([1,-1,-1])
+        self.offset=np.asarray(config['camera_offset_m'],float); self.static=config['mode']=='static'
+        self.origin=np.array(config.get('static_origin_m',[0,1.6,0]),float)
+    def start(self):
+        if not self.static:
+            self.thread=threading.Thread(target=self.poll,name='openvr',daemon=True); self.thread.start()
+    def poll(self):
+        import openvr
+        initialized=False
+        while not self.stop.is_set():
+            try:
+                if not initialized: openvr.init(openvr.VRApplication_Background); initialized=True
+                poses=openvr.VRSystem().getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseStanding,0,openvr.k_unMaxTrackedDeviceCount)
+                hmd=poses[openvr.k_unTrackedDeviceIndex_Hmd]
+                if hmd.bPoseIsValid and hmd.bDeviceIsConnected:
+                    m=np.array(hmd.mDeviceToAbsoluteTracking.m,dtype=float)
+                    with self.lock: self.history.append((time.monotonic(),m[:,:3],m[:,3]))
+                self.stop.wait(.008)
+            except Exception as e:
+                logging.getLogger(__name__).warning('SteamVR unavailable: %s',e)
+                if initialized: openvr.shutdown(); initialized=False
+                self.stop.wait(2)
+        if initialized: openvr.shutdown()
+    def pose_at(self,t):
+        if self.static: return np.eye(3),self.origin.copy()
+        with self.lock: history=list(self.history)
+        if not history or abs(history[-1][0]-t)>.3: raise ValueError('no recent HMD pose; suppress world tracking')
+        times=np.array([v[0] for v in history]); i=int(np.searchsorted(times,t))
+        if i==0 or i==len(history):
+            item=history[min(i,len(history)-1)]
+            if abs(item[0]-t)>.035: raise ValueError('capture outside HMD history')
+            return item[1],item[2]
+        a,b=history[i-1],history[i]; f=(t-a[0])/(b[0]-a[0]); qa=Rotation.from_matrix(a[1]); qb=Rotation.from_matrix(b[1])
+        rot=Rotation.from_rotvec((qb*qa.inv()).as_rotvec()*f)*qa
+        return rot.as_matrix(),a[2]*(1-f)+b[2]*f
+    def transform(self,p,q,t,side):
+        r,h=self.pose_at(t); cr=r@self.mount
+        grip=Rotation.from_euler('xyz',self.config['grip_rotation_deg'][str(side)],degrees=True)
+        position=h+r@self.offset+cr@p
+        orientation=Rotation.from_matrix(cr)*Rotation.from_quat(q)*grip
+        return position,orientation.as_quat()
+    def close(self):
+        self.stop.set()
+        if not self.static: self.thread.join(3)

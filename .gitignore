@@ -1,0 +1,12 @@
+*.ipa
+*.p12
+*.mobileprovision
+*.key
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+build/
+private/
+*.dylib
+calibration.local.yaml

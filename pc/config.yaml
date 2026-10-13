@@ -1,0 +1,44 @@
+network:
+  port: 39570
+  timeout_s: 3.0
+  bind_ip: 0.0.0.0
+  advertise_ip: null # Set PC Wi-Fi IPv4 if route auto-selection chooses VPN/Ethernet
+reconstruction:
+  palm_width_m: 0.085 # MEASURE index MCP to little-finger MCP; not outer skin width
+  bone_lengths_m: null # Optional five rows [proximal, intermediate, distal] metres
+  distortion: null # Brown-Conrady [k1,k2,p1,p2,k3] for this exact video format
+  max_evaluations: 22
+camera_intrinsics: null # Optional measured [fx,fy,cx,cy] at packet resolution
+calibration_distance_m: 0.5 # Start: hold palm frontal at this measured WRIST distance
+filter:
+  position_hz: 1.5
+  position_beta: 3.0
+  rotation_hz: 2.0
+  rotation_beta: 0.25
+  prediction_ms: 15
+space:
+  mode: hmd # static only for a physically FIXED camera; never for a worn moving phone
+  camera_offset_m: [0.0, 0.0, 0.0] # MEASURE relative to HMD tracked origin
+  camera_rotation_deg: [0.0, 0.0, 0.0] # mount correction after camera-to-OpenVR basis
+  grip_rotation_deg: {'1': [0.0, 0.0, 0.0], '2': [0.0, 0.0, 0.0]}
+  static_origin_m: [0.0, 1.6, 0.0]
+glassvr:
+  host: 127.0.0.1
+  left_port: 9001
+  right_port: 9002
+xinput:
+  index: 0
+  deadzone_value: 0.18
+  trigger_deadzone: 0.05
+mapping:
+  select_left: lb
+  select_right: rb
+  trigger: rt
+  grip_pull: lt
+  a: a
+  b: b
+  joy_btn: x
+  system: dpad_up
+  mode: y
+  calibrate: start
+  recenter: back

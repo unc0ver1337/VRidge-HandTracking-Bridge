@@ -1,0 +1,38 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r pc/requirements.txt
+      - run: python -m pytest -q --junitxml=test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-windows
+          path: test-results.xml
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ARM64 dynamic library
+        run: bash ios/build.sh
+      - name: Verify ARM64 load commands
+        run: |
+          file ios/build/VRidgeHandTracking.dylib
+          otool -l ios/build/VRidgeHandTracking.dylib > ios/build/load-commands.txt
+          shasum -a 256 ios/build/VRidgeHandTracking.dylib > ios/build/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-arm64-dylib
+          path: ios/build/
+          retention-days: 14
