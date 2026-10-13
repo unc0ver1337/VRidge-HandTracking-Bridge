@@ -16,7 +16,6 @@
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence; double _meanMS; unsigned _samples;
     CVPixelBufferPoolRef _pool; int _width,_height;
-    float _previous[2][2]; BOOL _hasPrevious[2];
     NSHashTable<AVCaptureSession *> *_hostSessions;
     NSHashTable<AVCaptureSession *> *_ownedSessions;
 }
@@ -78,6 +77,9 @@
     [s addOutput:out]; AVCaptureConnection *connection=[out connectionWithMediaType:AVMediaTypeVideo];
     // Keep native sensor orientation regardless of interface rotation. Vision Up and
     // packet coordinates refer to that SAME image; UI autorotation cannot move hands.
+    if(@available(iOS 17.0,*)){
+        if([connection isVideoRotationAngleSupported:0])connection.videoRotationAngle=0;
+    }else if(connection.isVideoOrientationSupported){connection.videoOrientation=AVCaptureVideoOrientationLandscapeRight;}
     if(connection.isVideoMirroringSupported){connection.automaticallyAdjustsVideoMirroring=NO;connection.videoMirrored=NO;}
     if(connection.isCameraIntrinsicMatrixDeliverySupported)connection.cameraIntrinsicMatrixDeliveryEnabled=YES;
     [s commitConfiguration]; _session=s;[_ownedSessions addObject:s];
@@ -89,7 +91,7 @@
     _wanted=NO;
     dispatch_async(_captureQueue,^{
         [self teardown];
-        self->_samples=0;self->_meanMS=0; self->_hasPrevious[0]=self->_hasPrevious[1]=NO;
+        self->_samples=0;self->_meanMS=0;
     });
 }
 - (void)teardown {

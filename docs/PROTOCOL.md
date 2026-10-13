@@ -12,7 +12,7 @@ RTT = (t3-t0)-(s2-s1)
 capture_pc = capture_ios + offset
 ```
 
-Minimum observed RTT selects the current offset. Reported ±RTT/2 bounds path asymmetry only approximately; no absolute one-way latency is known. Long-running oscillator drift is not explicitly fitted: restart/rehandshake if latency/clock rejection increases. Clock sync must succeed before accepting frames. Packets >200ms old or >30ms in the future are dropped. Captures use AVFoundation sample presentation timestamp converted to the host clock, not inference completion or wall clock.
+Minimum observed RTT in a sliding 60-second window selects the current offset, refreshing oscillator drift without following every Wi-Fi delay spike. Reported ±RTT/2 bounds path asymmetry only approximately; no absolute one-way latency is known. Clock sync must succeed before accepting frames. Packets >200ms old or >30ms in the future are dropped. Captures use AVFoundation sample presentation timestamp converted to the host clock, not inference completion or wall clock.
 
 Binary little-endian header, 48 bytes (`<4sBBHIQdHH4f`):
 

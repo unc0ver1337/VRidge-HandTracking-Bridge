@@ -44,6 +44,13 @@ def test_occlusion_reject():
     _,_,h,f=synthetic();h.points[:,2]=0
     with pytest.raises(ValueError): Solver().solve(h,f,2)
 
+def test_partial_finger_occlusion_uses_bounded_kinematics():
+    _,_,h,f=synthetic(flex=.25);s=Solver();s.solve(h,f,2)
+    f.capture+=1/30;h.points[[6,7,10,11,14,15],2]=0
+    out=s.solve(h,f,2)
+    assert out.pixel_rmse<5 and np.isfinite(out.joints).all()
+    assert np.ptp(out.joints[:,2])>.005 # nonconstant per-landmark depth
+
 def test_rigid_calibration():
     a=np.array([[0,0,0],[1,0,0],[0,1,0],[0,0,1]],float);r=Rotation.from_euler('xyz',[.2,.3,.4]).as_matrix();t=np.array([.1,.2,.3]);b=a@r.T+t
     rr,tt,error=rigid_alignment(a,b);np.testing.assert_allclose(rr,r,atol=1e-12);np.testing.assert_allclose(tt,t);assert error<1e-10

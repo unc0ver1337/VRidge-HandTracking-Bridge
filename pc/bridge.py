@@ -76,6 +76,6 @@ def main():
     except KeyboardInterrupt: log.info('Stopping; releasing controller input')
     finally:
         inputs.close();glass.close(); space.close()
-        if started: server.close()
+        server.close()
 
 if __name__=='__main__': main()

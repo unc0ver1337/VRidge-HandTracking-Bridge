@@ -1,4 +1,5 @@
 import struct,socket
+import time
 from pathlib import Path
 import numpy as np,yaml
 from scipy.spatial.transform import Rotation
@@ -6,6 +7,7 @@ from pc.tracking.identity import Identity
 from pc.tracking.filter import PoseFilter
 from pc.protocol import Hand
 from pc.controller.xinput import Mapper,Input,deadzone,XInput
+from pc.controller.manager import InputManager
 from pc.glassvr.adapter import packets,GlassVR
 from pc.glassvr.space import Space
 
@@ -50,6 +52,25 @@ def test_input_switch_disconnect_and_analog():
     assert deadzone(.01,.02,.18)==(0,0)
     assert np.linalg.norm(deadzone(1,1,.18))<=1.000000001
     assert isinstance(XInput().poll(),Input)
+
+def test_input_loop_releases_on_loss_without_camera_processing():
+    class Sink:
+        def __init__(self):self.latest={}
+        def input_only(self,side,buttons):self.latest[side]=buttons.copy()
+    class Pad:
+        def poll(self):return Input(True,{'lb','a'})
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text());sink=Sink();m=InputManager(sink,cfg['xinput'],cfg['mapping']);m.pad=Pad()
+    m.tracked(1,time.monotonic());m.start()
+    try:
+        end=time.monotonic()+1
+        while not sink.latest.get(1,{}).get('a') and time.monotonic()<end:time.sleep(.01)
+        assert sink.latest[1]['a']
+        # Reconstruction is absent/blocked; the independent loop still releases.
+        with m.lock:m.valid_until[1]=0
+        end=time.monotonic()+1
+        while sink.latest[1] and time.monotonic()<end:time.sleep(.01)
+        assert sink.latest[1]=={}
+    finally:m.close()
 
 def test_glassvr_exact_upstream_wire_and_loopback():
     b=packets([.1,.2,.3],[0,0,0,1],{'a':True,'trigger':.6},np.zeros((5,4)))

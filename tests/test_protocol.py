@@ -44,3 +44,15 @@ def test_handshake_and_clock_without_hardware():
     assert abs(s.offset-10)<1e-6;assert abs(s.rtt-.018)<1e-6
     s.control(base|{'type':'hello','nonce':'b'*32},('10.0.0.3',1234),100.1)
     assert s.peer==addr and s.session==session
+
+def test_clock_refresh_window_prevents_permanent_old_offset():
+    s=Server();s.peer=('10.0.0.2',5);s.session=7;addr=s.peer
+    base={'protocol':'VHBR','v':1,'type':'sync','session':7}
+    s.control(base|{'t0':90.,'t3':90.01,'s1':100.004,'s2':100.006},addr,100.01)
+    assert abs(s.offset-10)<1e-8
+    s.control(base|{'t0':151.,'t3':151.02,'s1':161.011,'s2':161.013},addr,161.03)
+    assert abs(s.offset-10.002)<1e-8
+
+def test_startup_failure_cleanup_without_equipment():
+    s=Server();s.close() # idempotent before resources are allocated
+    s.close()

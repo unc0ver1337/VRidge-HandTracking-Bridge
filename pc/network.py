@@ -1,4 +1,5 @@
 import json,logging,secrets,socket,threading,time,uuid
+from collections import deque
 from .protocol import decode,Sequence,VERSION
 
 LOG=logging.getLogger(__name__)
@@ -11,6 +12,7 @@ class Server:
         self.stop=threading.Event(); self.lock=threading.Lock(); self.latest=None
         self.peer=None; self.session=0; self.last_seen=0; self.seq=Sequence(); self.offset=None; self.rtt=float('inf')
         self.invalid=0; self.replaced=0; self.clock_rejected=0
+        self.clock_samples=deque(maxlen=120);self.registered=False
     def start(self):
         from zeroconf import Zeroconf,ServiceInfo
         self.sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); self.sock.bind((self.bind_ip,self.port)); self.sock.settimeout(.2)
@@ -22,6 +24,7 @@ class Server:
         self.zc=Zeroconf(interfaces=[ip])
         self.service=ServiceInfo(SERVICE,'GlassVR iPhone Bridge.'+SERVICE,addresses=[socket.inet_aton(ip)],port=self.port,properties={'protocol':'VHBR','version':str(VERSION),'instance':str(uuid.uuid4())},server=socket.gethostname()+'.local.')
         self.zc.register_service(self.service)
+        self.registered=True
         self.thread=threading.Thread(target=self.run,name='network',daemon=True); self.thread.start()
         LOG.info('Bonjour GlassVR iPhone Bridge %s:%d',ip,self.port)
     def send(self,obj,addr): self.sock.sendto(json.dumps(obj,separators=(',',':')).encode(),addr)
@@ -33,7 +36,7 @@ class Server:
             if not isinstance(nonce,str) or not 16<=len(nonce)<=64: raise ValueError('nonce')
             if self.peer and addr!=self.peer and now-self.last_seen<self.timeout: return
             if self.peer!=addr or msg.get('nonce')!=getattr(self,'nonce',None):
-                self.session=secrets.randbits(52)+1; self.peer=addr; self.seq=Sequence(); self.offset=None; self.rtt=float('inf'); self.nonce=nonce
+                self.session=secrets.randbits(52)+1; self.peer=addr; self.seq=Sequence(); self.offset=None; self.rtt=float('inf'); self.nonce=nonce;self.clock_samples.clear()
                 with self.lock: self.latest=None
                 LOG.info('iPhone %s at %s',str(msg.get('device','unknown'))[:80],addr)
             self.last_seen=now
@@ -48,8 +51,9 @@ class Server:
                 if not all(math.isfinite(x) for x in (t0,t3,s1,s2)): raise ValueError('clock')
                 rtt=(t3-t0)-(s2-s1)
                 if not 0<=rtt<.5 or abs(now-s2)>.5: raise ValueError('clock interval')
-                if rtt<self.rtt:
-                    self.rtt=rtt; self.offset=((s1-t0)+(s2-t3))/2
+                self.clock_samples.append((now,rtt,((s1-t0)+(s2-t3))/2))
+                while self.clock_samples and now-self.clock_samples[0][0]>60:self.clock_samples.popleft()
+                _,self.rtt,self.offset=min(self.clock_samples,key=lambda item:item[1])
     def ingest(self,data,addr,now):
         if data.startswith(b'{'):
             self.control(json.loads(data),addr,now); return
@@ -75,4 +79,10 @@ class Server:
         with self.lock: result=self.latest; self.latest=None
         return result
     def close(self):
-        self.stop.set(); self.thread.join(1); self.sock.close(); self.zc.unregister_service(self.service); self.zc.close()
+        self.stop.set()
+        if hasattr(self,'thread'):self.thread.join(1)
+        if hasattr(self,'sock'):self.sock.close()
+        if hasattr(self,'zc'):
+            try:
+                if self.registered:self.zc.unregister_service(self.service)
+            finally:self.zc.close()
