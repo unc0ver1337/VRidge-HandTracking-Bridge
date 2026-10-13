@@ -17,8 +17,8 @@ def packets(position,quaternion,buttons,angles):
     # thumb = [5,90,90]. Least-squares inverse fits those actual driver gains.
     gains=np.deg2rad(np.array([[5,90,90]]+[[90,80,80]]*4))
     curls[::4]=np.clip(np.sum(a[:,1:]*gains,axis=1)/np.sum(gains*gains,axis=1),0,1)
-    # GlassVR's splay unit is a multiplier of 20 degrees, not radians.
-    splay=a[:,0]/np.deg2rad(20)
+    # Upstream thumb splay multiplies 20deg, generic finger splay 15deg.
+    splay=a[:,0]/np.deg2rad([20,15,15,15,15])
     # Upstream skeletal simulation consumes only indices 0,4,8,12,16.
     return [struct.pack('<c3d',b'P',*p),struct.pack('<c4d',b'R',q[3],*q[:3]),
             struct.pack('<c12?8d',b'I',*[bool(buttons.get(k,False)) for k in digital],*values),

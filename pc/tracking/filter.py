@@ -9,7 +9,7 @@ class PoseFilter:
         self.pc=position_hz; self.pb=position_beta; self.rc=rotation_hz; self.rb=rotation_beta
         self.prediction=min(max(prediction_ms/1000,0),0.03); self.t=None; self.velocity=np.zeros(3)
     def update(self,p,q,t):
-        p=np.asarray(p); q=np.asarray(q)/np.linalg.norm(q)
+        p=np.asarray(p,dtype=float); q=np.asarray(q,dtype=float)/np.linalg.norm(q)
         if self.t is None:
             self.p=p.copy(); self.raw=p.copy(); self.q=q.copy(); self.t=t; self.velocity=np.zeros(3)
             return self.p.copy(), self.q.copy()

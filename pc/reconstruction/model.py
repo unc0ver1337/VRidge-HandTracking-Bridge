@@ -9,8 +9,9 @@ LENGTHS=np.array([[.035,.025,.022],[.045,.027,.020],[.050,.030,.022],[.046,.028,
 class Model:
     def __init__(self,palm_width_m=.085,bone_lengths_m=None):
         if not .045<=palm_width_m<=.13: raise ValueError('measure MCP breadth, metres')
-        self.base=BASE*(palm_width_m/.085)
-        self.lengths=LENGTHS*(palm_width_m/.085) if bone_lengths_m is None else np.asarray(bone_lengths_m)
+        template_width=np.linalg.norm(BASE[1]-BASE[4])
+        self.base=BASE*(palm_width_m/template_width)
+        self.lengths=LENGTHS*(palm_width_m/template_width) if bone_lengths_m is None else np.asarray(bone_lengths_m)
         if self.lengths.shape!=(5,3) or not np.isfinite(self.lengths).all() or np.any(self.lengths<=0): raise ValueError('bone lengths')
     def local(self,angles,side):
         angles=np.asarray(angles).reshape(5,4) # splay, MCP, PIP, DIP radians

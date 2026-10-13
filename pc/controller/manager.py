@@ -17,9 +17,15 @@ class InputManager:
             buttons={s:b.copy() for s,b in self.buttons.items()};events=list(self.events);self.events.clear()
         return buttons,events
     def run(self):
+        connected=None
         while not self.stop.is_set():
             try:
-                buttons,events=self.mapper.update(self.pad.poll());now=time.monotonic()
+                pad=self.pad.poll()
+                if pad.connected!=connected:
+                    connected=pad.connected;logging.getLogger(__name__).info('Xbox 360/XInput %s','connected' if connected else 'not connected; releasing input')
+                before=(self.mapper.side,self.mapper.split)
+                buttons,events=self.mapper.update(pad);now=time.monotonic()
+                if before!=(self.mapper.side,self.mapper.split):logging.getLogger(__name__).info('Button hand=%s sticks=%s','left' if self.mapper.side==1 else 'right','split' if self.mapper.split else 'selected hand')
                 with self.lock:
                     self.buttons=buttons;self.events.extend(events)
                     safe={s:(buttons[s] if now<self.valid_until[s] else {}) for s in (1,2)}

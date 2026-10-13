@@ -17,6 +17,8 @@
     uint32_t _sequence; double _meanMS; unsigned _samples;
     CVPixelBufferPoolRef _pool; int _width,_height;
     float _previous[2][2]; BOOL _hasPrevious[2];
+    NSHashTable<AVCaptureSession *> *_hostSessions;
+    NSHashTable<AVCaptureSession *> *_ownedSessions;
 }
 - (instancetype)initWithSettings:(NSDictionary *)settings {
     if((self=[super init])){
@@ -25,10 +27,14 @@
         _width=MAX(64,MIN(1280,_width));_height=MAX(64,MIN(960,_height));
         _request=[VNDetectHumanHandPoseRequest new]; _request.maximumHandCount=2;
         _context=[CIContext contextWithOptions:@{kCIContextCacheIntermediates:@NO}];
+        _hostSessions=[NSHashTable weakObjectsHashTable];
+        _ownedSessions=[NSHashTable weakObjectsHashTable];
         NSNotificationCenter *nc=NSNotificationCenter.defaultCenter;
         [nc addObserver:self selector:@selector(interrupted:) name:AVCaptureSessionWasInterruptedNotification object:nil];
         [nc addObserver:self selector:@selector(interrupted:) name:AVCaptureSessionRuntimeErrorNotification object:nil];
         [nc addObserver:self selector:@selector(resume:) name:AVCaptureSessionInterruptionEndedNotification object:nil];
+        [nc addObserver:self selector:@selector(hostStarted:) name:AVCaptureSessionDidStartRunningNotification object:nil];
+        [nc addObserver:self selector:@selector(hostStopped:) name:AVCaptureSessionDidStopRunningNotification object:nil];
     } return self;
 }
 - (void)emit:(NSString *)text { dispatch_async(dispatch_get_main_queue(),^{if(self.status)self.status(text);}); }
@@ -43,6 +49,9 @@
 }
 - (void)configure {
     if(_session)return;
+    for(AVCaptureSession *host in _hostSessions){
+        if(host.running){[self emit:@"VRidge is using camera; hand tracking waits"];return;}
+    }
     _camera=[AVCaptureDevice defaultDeviceWithDeviceType:AVCaptureDeviceTypeBuiltInUltraWideCamera mediaType:AVMediaTypeVideo position:AVCaptureDevicePositionBack];
     if(!_camera){[self emit:@"Ultra-wide camera unavailable"];return;}
     NSError *error=nil; AVCaptureDeviceInput *input=[AVCaptureDeviceInput deviceInputWithDevice:_camera error:&error];
@@ -71,7 +80,7 @@
     // packet coordinates refer to that SAME image; UI autorotation cannot move hands.
     if(connection.isVideoMirroringSupported){connection.automaticallyAdjustsVideoMirroring=NO;connection.videoMirrored=NO;}
     if(connection.isCameraIntrinsicMatrixDeliverySupported)connection.cameraIntrinsicMatrixDeliveryEnabled=YES;
-    [s commitConfiguration]; _session=s;
+    [s commitConfiguration]; _session=s;[_ownedSessions addObject:s];
     NSDictionary *attributes=@{(id)kCVPixelBufferPixelFormatTypeKey:@(kCVPixelFormatType_32BGRA),(id)kCVPixelBufferWidthKey:@(_width),(id)kCVPixelBufferHeightKey:@(_height),(id)kCVPixelBufferIOSurfacePropertiesKey:@{}};
     CVPixelBufferPoolCreate(kCFAllocatorDefault,nullptr,(__bridge CFDictionaryRef)attributes,&_pool);
     [s startRunning]; if(s.running)[self emit:@"Hand tracking started"];
@@ -79,21 +88,46 @@
 - (void)stop {
     _wanted=NO;
     dispatch_async(_captureQueue,^{
-        [self->_session stopRunning]; self->_session=nil; self->_camera=nil;
-        // Drain the single retained inference before destroying the pixel pool.
-        dispatch_sync(self->_visionQueue,^{});
-        if(self->_pool){CVPixelBufferPoolRelease(self->_pool);self->_pool=nullptr;}
+        [self teardown];
         self->_samples=0;self->_meanMS=0; self->_hasPrevious[0]=self->_hasPrevious[1]=NO;
     });
 }
+- (void)teardown {
+    // Only this tweak's own session. Existing host capture sessions are observed,
+    // never stopped, swizzled, or reconfigured.
+    [_session stopRunning]; _session=nil; _camera=nil;
+    dispatch_sync(_visionQueue,^{});
+    if(_pool){CVPixelBufferPoolRelease(_pool);_pool=nullptr;}
+}
+- (void)hostStarted:(NSNotification *)n {
+    AVCaptureSession *host=n.object;
+    dispatch_async(_captureQueue,^{
+        if([self->_ownedSessions containsObject:host])return;
+        [self->_hostSessions addObject:host];
+        if(self->_session){[self teardown];[self emit:@"VRidge camera takes priority; tracking paused"];}
+    });
+}
+- (void)hostStopped:(NSNotification *)n {
+    AVCaptureSession *host=n.object;
+    dispatch_async(_captureQueue,^{
+        if([self->_ownedSessions containsObject:host])return;
+        [self->_hostSessions removeObject:host];
+        if(self->_wanted&&!self->_session)[self configure];
+    });
+}
 - (void)interrupted:(NSNotification *)n {
-    if(n.object!=_session)return;
-    [self emit:@"Camera interrupted; tracking suspended, VRidge preserved"];
-    // Never stop/reconfigure any host session. Keep this session for interruption-end.
+    dispatch_async(_captureQueue,^{
+        if(n.object!=self->_session)return;
+        [self emit:@"Camera interrupted; tracking suspended, VRidge preserved"];
+        if([n.name isEqual:AVCaptureSessionRuntimeErrorNotification]){
+            [self teardown];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),self->_captureQueue,^{if(self->_wanted)[self configure];});
+        }
+        // Ordinary interruptions retain the session until interruption-end.
+    });
 }
 - (void)resume:(NSNotification *)n {
-    if(n.object!=_session||!_wanted)return;
-    dispatch_async(_captureQueue,^{[self->_session startRunning];});
+    dispatch_async(_captureQueue,^{if(n.object==self->_session&&self->_wanted)[self->_session startRunning];});
 }
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sample fromConnection:(AVCaptureConnection *)connection {
     if(_busy.exchange(true))return;

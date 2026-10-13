@@ -31,6 +31,16 @@ def test_filters_jitter_quaternion_sign_and_prediction():
     assert np.std(np.array(positions)[30:])<.002
     p,q=f.update([.5,0,0],[0,0,1,0],4);assert np.isfinite(p).all()
 
+def test_reacquisition_does_not_teleport():
+    f=PoseFilter(prediction_ms=0);f.update([0,0,0],[0,0,0,1],0)
+    p,q=f.update([1,0,0],[0,0,1,0],2)
+    assert np.linalg.norm(p)<=.1+1e-9
+    assert Rotation.from_quat(q).magnitude()<=.4+1e-9
+
+def test_glassvr_splay_and_curl_units():
+    angles=np.zeros((5,4));angles[1]=np.deg2rad([15,90,80,80]);raw=packets([0,0,0],[0,0,0,1],{},angles)[3]
+    values=struct.unpack('<c25d',raw)[1:];assert abs(values[4]-1)<1e-9;assert abs(values[21]-1)<1e-9
+
 def test_input_switch_disconnect_and_analog():
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
     out,e=m.update(Input(True,{'lb','a'},.4,.7,(.2,.5),(.3,.1)))

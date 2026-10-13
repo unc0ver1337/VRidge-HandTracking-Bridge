@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <atomic>
 
 static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())); }
 @implementation VHNetwork {
@@ -14,9 +15,10 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
     int _fd; NSData *_address; uint64_t _session; NSString *_nonce;
     double _lastReply,_searchStart,_deadline,_retryAfter; BOOL _connected,_running;
     NSDictionary *_settings;
+    std::atomic_bool _sendBusy;
 }
 - (instancetype)initWithSettings:(NSDictionary *)settings {
-    if ((self=[super init])) { _fd=-1; _queue=dispatch_queue_create("vh.network",DISPATCH_QUEUE_SERIAL); _settings=settings; _services=[NSMutableArray array]; }
+    if ((self=[super init])) { _fd=-1; _sendBusy=false; _queue=dispatch_queue_create("vh.network",DISPATCH_QUEUE_SERIAL); _settings=settings; _services=[NSMutableArray array]; }
     return self;
 }
 - (void)emit:(NSString *)s { dispatch_async(dispatch_get_main_queue(),^{ if(self.status)self.status(s); }); }
@@ -116,10 +118,13 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
     }
 }
 - (void)sendFrame:(NSData *)data {
+    if(_sendBusy.exchange(true))return; // retain at most one outgoing frame
     dispatch_async(_queue,^{
-        if(!self->_connected||data.length<sizeof(VHHeader))return;
-        NSMutableData *packet=[data mutableCopy]; VHHeader *header=(VHHeader *)packet.mutableBytes; header->session=self->_session;
-        sendto(self->_fd,packet.bytes,packet.length,0,(const sockaddr *)self->_address.bytes,(socklen_t)self->_address.length);
+        if(self->_connected&&data.length>=sizeof(VHHeader)){
+            NSMutableData *packet=[data mutableCopy]; VHHeader *header=(VHHeader *)packet.mutableBytes; header->session=self->_session;
+            sendto(self->_fd,packet.bytes,packet.length,0,(const sockaddr *)self->_address.bytes,(socklen_t)self->_address.length);
+        }
+        self->_sendBusy=false;
     });
 }
 @end

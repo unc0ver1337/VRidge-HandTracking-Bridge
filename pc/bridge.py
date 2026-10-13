@@ -1,5 +1,6 @@
 """Run: python -m pc.bridge --config pc/config.yaml"""
 import argparse,logging,time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import numpy as np
 import yaml
@@ -13,16 +14,18 @@ from .glassvr.adapter import GlassVR
 from .glassvr.space import Space
 
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument('--config',default='pc/config.yaml'); parser.add_argument('--log',default='bridge.log'); args=parser.parse_args()
-    logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(name)s %(message)s',handlers=[logging.StreamHandler(),logging.FileHandler(args.log,encoding='utf8')])
+    parser=argparse.ArgumentParser(); parser.add_argument('--config',default='pc/config.yaml'); parser.add_argument('--log',default='bridge.log');parser.add_argument('--duration',type=float,default=0,help='Optional diagnostic runtime in seconds'); args=parser.parse_args()
+    logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(name)s %(message)s',handlers=[logging.StreamHandler(),RotatingFileHandler(args.log,maxBytes=8*1024*1024,backupCount=3,encoding='utf8')])
     log=logging.getLogger('bridge'); cfg=yaml.safe_load(Path(args.config).read_text())
     server=Server(**cfg['network']); solver=Solver(**cfg['reconstruction']); identity=Identity()
     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}; glass=GlassVR(**cfg['glassvr']); space=Space(cfg['space'])
     inputs=InputManager(glass,cfg['xinput'],cfg['mapping']); current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); started=False
+    active_session=None; quality={};reasons={}
     try:
-        server.start(); started=True; space.start();inputs.start()
+        server.start(); started=True; space.start();inputs.start();run_start=time.monotonic()
         while True:
             now=time.monotonic()
+            if args.duration>0 and now-run_start>=args.duration:break
             buttons,events=inputs.take()
             if events:
                 for event in events:
@@ -43,6 +46,8 @@ def main():
             item=server.take()
             if item:
                 f,capture_pc,received=item; current={}
+                if f.session!=active_session:
+                    active_session=f.session;solver.previous.clear();identity=Identity()
                 if cfg.get('camera_intrinsics') is not None: f.intrinsics=np.asarray(cfg['camera_intrinsics'],float)
                 for side,hand in identity.update(f.hands,f.capture).items():
                     current[side]=(side,hand,f)
@@ -56,12 +61,16 @@ def main():
                         if time.monotonic()-capture_pc>.2:raise ValueError('solve exceeded pose freshness budget')
                         glass.send(side,p,q,{},pose.angles,include_input=False); inputs.tracked(side,time.monotonic())
                         solved_ms.append(pose.solve_ms)
-                    except ValueError as error: log.debug('hand %s: %s',side,error)
+                        quality[side]={'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
+                    except ValueError as error:
+                        message=str(error);reasons[message]=reasons.get(message,0)+1
                     except Exception: log.exception('isolated hand processing failure')
                 n+=1; latencies.append((time.monotonic()-capture_pc)*1000)
             if now-report>=2:
                 active=bool(server.peer and now-server.last_seen<server.timeout)
                 log.info('phone=%s fps=%.1f capture-to-output=%.1fms (+/- clock %.1fms) reconstruction=%.1fms/hand loss=%.2f%% stale=%d invalid=%d replaced=%d', 'connected' if active else 'waiting',n/(now-report),np.mean(latencies) if latencies else 0,server.rtt*500,np.mean(solved_ms) if solved_ms else 0,server.seq.loss*100,server.clock_rejected,server.invalid,server.replaced)
+                if quality or reasons:log.info('hand quality=%s rejected=%s',quality,reasons)
+                quality.clear();reasons.clear()
                 n=0; solved_ms.clear(); latencies.clear(); report=now
             time.sleep(.001)
     except KeyboardInterrupt: log.info('Stopping; releasing controller input')

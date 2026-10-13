@@ -19,9 +19,9 @@ class Estimate:
     palm_facing: str
 
 class Solver:
-    def __init__(self,palm_width_m=.085,bone_lengths_m=None,distortion=None,max_evaluations=22):
+    def __init__(self,palm_width_m=.085,bone_lengths_m=None,distortion=None,max_evaluations=22,warm_max_evaluations=8):
         self.model=Model(palm_width_m,bone_lengths_m); self.distortion=distortion
-        self.previous={}; self.max_eval=max_evaluations
+        self.previous={}; self.max_eval=max_evaluations;self.warm_max_eval=warm_max_evaluations
         # Splay +/-35deg, MCP up to95, PIP110, DIP85. Thumb uses same conservative bounds.
         self.low=np.r_[[-3,-3,.08],[-2*np.pi]*3,np.tile([-.61,-.15,0,0],5)]
         self.high=np.r_[[3,3,2.5],[2*np.pi]*3,np.tile([.61,1.66,1.92,1.48],5)]
@@ -69,7 +69,8 @@ class Solver:
             alternate=initial.copy()
             alternate[3:6]=(Rotation.from_rotvec(initial[3:6])*Rotation.from_rotvec([.65,0,0])).as_rotvec()
             starts.append(alternate)
-        fits=[least_squares(residual,np.clip(x,self.low+1e-6,self.high-1e-6),jac=jacobian,bounds=(self.low,self.high),loss='soft_l1',f_scale=2.,max_nfev=self.max_eval) for x in starts]
+        budget=min(self.max_eval,self.warm_max_eval) if continuous else self.max_eval
+        fits=[least_squares(residual,np.clip(x,self.low+1e-6,self.high-1e-6),jac=jacobian,bounds=(self.low,self.high),loss='soft_l1',f_scale=2.,max_nfev=budget) for x in starts]
         fit=min(fits,key=lambda f:np.sum(residual(f.x)**2)); points=self.model.forward(fit.x,side)
         error=np.linalg.norm(project(points,frame.intrinsics,self.distortion)-uv,axis=1)
         rmse=np.sqrt(np.average(error**2,weights=c))

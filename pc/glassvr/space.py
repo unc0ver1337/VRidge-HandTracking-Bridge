@@ -30,7 +30,7 @@ class Space:
                     with self.lock: self.history.append((time.monotonic(),m[:,:3],m[:,3]))
                 self.stop.wait(.008)
             except Exception as e:
-                logging.getLogger(__name__).warning('SteamVR unavailable: %s',e)
+                logging.getLogger(__name__).warning('SteamVR unavailable: %s %r',type(e).__name__,e)
                 if initialized: openvr.shutdown(); initialized=False
                 self.stop.wait(2)
         if initialized: openvr.shutdown()
