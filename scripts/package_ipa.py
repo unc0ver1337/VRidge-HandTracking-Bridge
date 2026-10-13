@@ -59,7 +59,9 @@ def package(ipa,dylib,output,settings,identity=None,profile=None,entitlements=No
         info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands while VRidge streams VR.'
         info['NSLocalNetworkUsageDescription']='Find GlassVR iPhone Bridge and stream hand landmarks to your PC.'
         info['NSBonjourServices']=sorted(set(info.get('NSBonjourServices',[])+['_vhbridge._udp']))
-        # Preserve bundle ID and original minimum OS. Dylib constructor checks iOS15.
+        # A strongly loaded iOS15 dylib cannot safely preserve iOS11 installability.
+        # Keep the bundle ID, but advertise the actual minimum supported system.
+        if int(str(info.get('MinimumOSVersion','0')).split('.')[0])<15:info['MinimumOSVersion']='15.0'
         plist.write_bytes(plistlib.dumps(info))
         for signature in app.rglob('_CodeSignature'):
             if signature.is_dir(): shutil.rmtree(signature)

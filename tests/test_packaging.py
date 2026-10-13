@@ -1,5 +1,5 @@
-import struct,pytest
-from scripts.package_ipa import inject,LOAD_PATH
+import struct,pytest,zipfile,plistlib
+from scripts.package_ipa import inject,LOAD_PATH,package
 
 def macho(encrypted=0,slack=True):
     # One section at offset 4096 with a recognizable nonzero body.
@@ -20,3 +20,18 @@ def test_inject_preserves_code_and_adds_load_command():
 def test_inject_refuses_encryption_and_occupied_slack():
     with pytest.raises(ValueError):inject(macho(1))
     with pytest.raises(ValueError):inject(macho(slack=False))
+
+def test_complete_private_packaging_metadata_and_preservation(tmp_path):
+    source=tmp_path/'source.ipa';dylib=tmp_path/'tracker.dylib';settings=tmp_path/'settings.plist';out=tmp_path/'out.ipa'
+    dylib.write_bytes(b'SYNTHETIC_TEST_LIBRARY');settings.write_bytes(plistlib.dumps({'FPS':60}))
+    info={'CFBundleExecutable':'Original','CFBundleIdentifier':'example.original','MinimumOSVersion':'11.0','NSBonjourServices':['_original._udp']}
+    with zipfile.ZipFile(source,'w') as z:
+        z.writestr('Payload/Original.app/Info.plist',plistlib.dumps(info));z.writestr('Payload/Original.app/Original',macho());z.writestr('Payload/Original.app/resource.bin',b'KEEP_ORIGINAL_RESOURCE')
+    original=source.read_bytes();package(source,dylib,out,settings)
+    assert source.read_bytes()==original
+    with zipfile.ZipFile(out) as z:
+        pl=plistlib.loads(z.read('Payload/Original.app/Info.plist'))
+        assert pl['CFBundleIdentifier']=='example.original' and pl['MinimumOSVersion']=='15.0'
+        assert pl['NSBonjourServices']==['_original._udp','_vhbridge._udp']
+        assert z.read('Payload/Original.app/Original')[4096:]==macho()[4096:]
+        assert z.read('Payload/Original.app/resource.bin')==b'KEEP_ORIGINAL_RESOURCE'
