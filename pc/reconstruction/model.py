@@ -28,6 +28,17 @@ class Model:
         if side==1: points[:,0]*=-1
         return points
     def forward(self,x,side): return Rotation.from_rotvec(x[3:6]).apply(self.local(x[6:],side))+x[:3]
+    def forward_batch(self,x,side):
+        """Evaluate all finite-difference perturbations together, no Python digit loop."""
+        x=np.atleast_2d(x);a=x[:,6:].reshape(-1,5,4)
+        theta=np.cumsum(a[:,:,1:],axis=2); az=a[:,:,0]+np.array([.85,0,0,0,0])
+        direction=np.stack([np.sin(az)[:,:,None]*np.cos(theta),np.cos(az)[:,:,None]*np.cos(theta),np.sin(theta)],axis=-1)
+        tips=self.base[None,:,None,:]+np.cumsum(direction*self.lengths[None,:,:,None],axis=2)
+        digits=np.concatenate([np.broadcast_to(self.base[None,:,None,:],(len(x),5,1,3)),tips],axis=2)
+        points=np.concatenate([np.zeros((len(x),1,3)),digits.reshape(-1,20,3)],axis=1)
+        if side==1:points[:,:,0]*=-1
+        r=Rotation.from_rotvec(x[:,3:6]).as_matrix()
+        return np.einsum('nij,nkj->nki',r,points)+x[:,None,:3]
 
 def project(points,k,distortion=None):
     fx,fy,cx,cy=k

@@ -50,7 +50,7 @@
 - (void)active:(NSNotification *)n {
     UNUserNotificationCenter *center=UNUserNotificationCenter.currentNotificationCenter;
     if(center.delegate!=_notice){_notice.previous=center.delegate;center.delegate=_notice;}
-    [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL ok,NSError *error){if(error)NSLog(@"VH authorization: %@",error);}];
+    [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL ok,NSError *error){if(!ok)NSLog(@"VH notifications disabled");if(error)NSLog(@"VH authorization: %@",error);}];
     [_network start];
 }
 - (void)inactive:(NSNotification *)n { [_tracker stop];[_network stop]; }
@@ -58,7 +58,7 @@
 
 __attribute__((constructor)) static void VHLoad() {
     dispatch_async(dispatch_get_main_queue(),^{
-        if(@available(iOS 15.0,*)){static VHRuntime *runtime;runtime=[VHRuntime new];}
+        if(@available(iOS 15.0,*)){static VHRuntime *runtime;if(!runtime)runtime=[VHRuntime new];}
         else NSLog(@"VH requires iOS 15 or later; VRidge left untouched");
     });
 }

@@ -8,7 +8,7 @@ from .tracking.identity import Identity
 from .tracking.filter import PoseFilter
 from .reconstruction.solver import Solver
 from .reconstruction.model import rays
-from .controller.xinput import XInput,Mapper
+from .controller.manager import InputManager
 from .glassvr.adapter import GlassVR
 from .glassvr.space import Space
 
@@ -18,14 +18,13 @@ def main():
     log=logging.getLogger('bridge'); cfg=yaml.safe_load(Path(args.config).read_text())
     server=Server(**cfg['network']); solver=Solver(**cfg['reconstruction']); identity=Identity()
     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}; glass=GlassVR(**cfg['glassvr']); space=Space(cfg['space'])
-    pad=XInput(**cfg['xinput']); mapper=Mapper(cfg['mapping']); last={}; current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); last_input=0; started=False
+    inputs=InputManager(glass,cfg['xinput'],cfg['mapping']); current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); started=False
     try:
-        server.start(); started=True; space.start()
+        server.start(); started=True; space.start();inputs.start()
         while True:
             now=time.monotonic()
-            if now-last_input>=.01:
-                buttons,events=mapper.update(pad.poll()); last_input=now
-                for side in (1,2): glass.input_only(side,buttons[side] if now-last.get(side,0)<.35 else {})
+            buttons,events=inputs.take()
+            if events:
                 for event in events:
                     if event=='calibrate' and current:
                         side,h,f=next(iter(current.values())); uv=h.points[:,:2]*[f.width,f.height]
@@ -52,7 +51,10 @@ def main():
                         # Transform using head pose at CAPTURE, filter in WORLD coordinates.
                         p,q=space.transform(pose.position,pose.quaternion,capture_pc,side)
                         p,q=filters[side].update(p,q,capture_pc)
-                        glass.send(side,p,q,buttons[side],pose.angles); last[side]=now
+                        # Drop results that spent too long optimizing; never render a
+                        # stale cold-start result or overwrite fresh XInput state.
+                        if time.monotonic()-capture_pc>.2:raise ValueError('solve exceeded pose freshness budget')
+                        glass.send(side,p,q,{},pose.angles,include_input=False); inputs.tracked(side,time.monotonic())
                         solved_ms.append(pose.solve_ms)
                     except ValueError as error: log.debug('hand %s: %s',side,error)
                     except Exception: log.exception('isolated hand processing failure')
@@ -64,7 +66,7 @@ def main():
             time.sleep(.001)
     except KeyboardInterrupt: log.info('Stopping; releasing controller input')
     finally:
-        glass.close(); space.close()
+        inputs.close();glass.close(); space.close()
         if started: server.close()
 
 if __name__=='__main__': main()

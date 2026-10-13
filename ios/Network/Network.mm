@@ -34,6 +34,7 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
         fcntl(self->_fd,F_SETFL,O_NONBLOCK);
         self->_nonce=NSUUID.UUID.UUIDString;
         self->_searchStart=ClockNow(); self->_deadline=[self->_settings[@"DiscoveryTimeoutSeconds"] doubleValue]?:15;
+        self->_deadline=MAX(1,MIN(120,self->_deadline));
         self->_timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,self->_queue);
         dispatch_source_set_timer(self->_timer,DISPATCH_TIME_NOW,100*NSEC_PER_MSEC,10*NSEC_PER_MSEC);
         __weak VHNetwork *weak=self;

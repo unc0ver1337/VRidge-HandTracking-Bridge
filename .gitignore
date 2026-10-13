@@ -10,3 +10,5 @@ build/
 private/
 *.dylib
 calibration.local.yaml
+artifacts/
+*.zip

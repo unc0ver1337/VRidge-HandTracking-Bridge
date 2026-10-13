@@ -13,7 +13,7 @@
     AVCaptureSession *_session; AVCaptureDevice *_camera;
     dispatch_queue_t _captureQueue; dispatch_queue_t _visionQueue;
     VNDetectHumanHandPoseRequest *_request; CIContext *_context;
-    NSDictionary *_settings; std::atomic_bool _busy; BOOL _wanted;
+    NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence; double _meanMS; unsigned _samples;
     CVPixelBufferPoolRef _pool; int _width,_height;
     float _previous[2][2]; BOOL _hasPrevious[2];
@@ -21,7 +21,8 @@
 - (instancetype)initWithSettings:(NSDictionary *)settings {
     if((self=[super init])){
         _settings=settings; _captureQueue=dispatch_queue_create("vh.capture",DISPATCH_QUEUE_SERIAL); _visionQueue=dispatch_queue_create("vh.vision",DISPATCH_QUEUE_SERIAL);
-        _busy=false; _pool=nullptr; _width=[settings[@"Width"] intValue]?:640; _height=[settings[@"Height"] intValue]?:480;
+        _busy=false; _wanted=false; _pool=nullptr; _width=[settings[@"Width"] intValue]?:640; _height=[settings[@"Height"] intValue]?:480;
+        _width=MAX(64,MIN(1280,_width));_height=MAX(64,MIN(960,_height));
         _request=[VNDetectHumanHandPoseRequest new]; _request.maximumHandCount=2;
         _context=[CIContext contextWithOptions:@{kCIContextCacheIntermediates:@NO}];
         NSNotificationCenter *nc=NSNotificationCenter.defaultCenter;
@@ -50,7 +51,7 @@
     if(![s canAddInput:input]){[s commitConfiguration];[self emit:@"Camera busy; VRidge preserved"];return;}
     [s addInput:input];
     AVCaptureDeviceFormat *best=nil; double score=DBL_MAX; double bestFPS=30;
-    double desired=[_settings[@"FPS"] doubleValue]?:60;
+    double desired=[_settings[@"FPS"] intValue]==30?30:60;
     for(AVCaptureDeviceFormat *format in _camera.formats){
         CMVideoDimensions d=CMVideoFormatDescriptionGetDimensions(format.formatDescription);
         double maxFPS=0; for(AVFrameRateRange *r in format.videoSupportedFrameRateRanges)maxFPS=MAX(maxFPS,r.maxFrameRate);
@@ -110,7 +111,7 @@
     CMClockRef clock=_session.masterClock;
     header.capture=CMTimeGetSeconds(clock?CMSyncConvertTime(pts,clock,CMClockGetHostTimeClock()):pts);
     CFTypeRef attachment=CMGetAttachment(sample,kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix,nullptr);
-    if(attachment&&CFGetTypeID(attachment)==CFDataGetTypeID()&&CFDataGetLength((CFDataRef)attachment)>=sizeof(matrix_float3x3)){
+    if(attachment&&CFGetTypeID(attachment)==CFDataGetTypeID()&&CFDataGetLength((CFDataRef)attachment)>=(CFIndex)sizeof(matrix_float3x3)){
         matrix_float3x3 k;memcpy(&k,CFDataGetBytePtr((CFDataRef)attachment),sizeof(k));
         header.fx=k.columns[0][0]*scale;header.fy=k.columns[1][1]*scale;
         header.cx=k.columns[2][0]*scale+ox; header.cy=k.columns[2][1]*scale+oy;
@@ -141,7 +142,14 @@
                 // Chirality is semantic evidence. Persistent spatial identity is resolved
                 // by the PC with velocity association; no left/right guess from screen X.
                 hand.identity=hand.side?:10+observationIndex; observationIndex++;
-                hand.palm=0; // 2D winding alone cannot identify palm/back reliably.
+                // Chirality + palm triangle winding gives a WEAK front/back cue.
+                // Suppress edge-on/low-confidence cases. PC never treats it as exact.
+                float ax=hand.landmarks[5][0]-hand.landmarks[0][0],ay=hand.landmarks[5][1]-hand.landmarks[0][1];
+                float bx=hand.landmarks[17][0]-hand.landmarks[0][0],by=hand.landmarks[17][1]-hand.landmarks[0][1];
+                float area=ax*by-ay*bx,den=hypotf(ax,ay)*hypotf(bx,by);
+                if(hand.side&&den>1e-6&&fabsf(area)/den>.2&&MIN(hand.landmarks[5][2],MIN(hand.landmarks[17][2],hand.landmarks[0][2]))>.5){
+                    float winding=area*(hand.side==1?-1:1);hand.palm=winding>0?1:-1;
+                }
                 [body appendBytes:&hand length:sizeof(hand)];h.count++;
             }
             NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];[data appendData:body]; if(self.frame)self.frame(data);

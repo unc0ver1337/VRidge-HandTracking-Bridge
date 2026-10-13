@@ -31,6 +31,11 @@ def test_bone_lengths_exact_under_flex():
     for i in range(5):
         np.testing.assert_allclose(np.linalg.norm(np.diff(j[1+4*i:5+4*i],axis=0),axis=1),m.lengths[i],atol=1e-12)
 
+def test_vectorized_model_matches_scalar():
+    rng=np.random.default_rng(13);m=Model();x=rng.normal(0,.3,(52,26));x[:,2]+=.7
+    for side in (1,2):
+        np.testing.assert_allclose(m.forward_batch(x,side),np.array([m.forward(a,side) for a in x]),atol=1e-12)
+
 def test_lens_roundtrip():
     uv=np.array([[100,120],[320,240],[580,420]],float);d=[-.12,.03,.001,-.002,0]
     rr=rays(uv,K,d);np.testing.assert_allclose(project(rr,K,d),uv,atol=1e-4)

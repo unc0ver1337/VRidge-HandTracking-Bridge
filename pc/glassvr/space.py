@@ -54,4 +54,4 @@ class Space:
         return position,orientation.as_quat()
     def close(self):
         self.stop.set()
-        if not self.static: self.thread.join(3)
+        if not self.static and hasattr(self,'thread'): self.thread.join(3)
