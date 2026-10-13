@@ -3,19 +3,6 @@ from collections import deque
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-def correct_head_relative_yaw(rotation,invert=False):
-    """Change only yaw in HMD axes, retaining pitch and longitudinal roll.
-
-    Intrinsic Y-X-Z: yaw around head up, then pitch, then controller roll.
-    This is an orientation correction, never a mirror of metric hand positions.
-    """
-    if not invert:return rotation
-    matrix=rotation.as_matrix()
-    horizontal=np.hypot(matrix[0,2],matrix[2,2])
-    if horizontal<1e-6:return rotation # yaw is undefined when pointing exactly vertical
-    yaw=np.arctan2(matrix[0,2],matrix[2,2])
-    return Rotation.from_rotvec([0,-2*yaw,0])*rotation
-
 class Space:
     """Timestamped HMD history + measured rigid camera mount. SteamVR metres.
 
@@ -65,9 +52,7 @@ class Space:
         r,h=self.pose_at(t); cr=r@self.mount
         grip=Rotation.from_euler('xyz',self.config['grip_rotation_deg'][str(side)],degrees=True)
         position=h+r@self.offset+cr@p
-        head_relative=Rotation.from_matrix(self.mount)*Rotation.from_quat(q)*grip
-        head_relative=correct_head_relative_yaw(head_relative,self.config.get('invert_yaw',False))
-        orientation=Rotation.from_matrix(r)*head_relative
+        orientation=Rotation.from_matrix(cr)*Rotation.from_quat(q)*grip
         return position,orientation.as_quat()
     def close(self):
         self.stop.set()

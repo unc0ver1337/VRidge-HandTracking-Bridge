@@ -19,7 +19,6 @@ filter:
   prediction_ms: 15
 space:
   mode: hmd # static only for a physically FIXED camera; never for a worn moving phone
-  invert_yaw: false # optional yaw-only correction in HMD axes; positions/pitch/roll stay unchanged
   camera_offset_m: [0.0, 0.0, 0.0] # MEASURE relative to HMD tracked origin
   camera_rotation_deg: [0.0, 0.0, 0.0] # mount correction after camera-to-OpenVR basis
   grip_rotation_deg: {'1': [0.0, 0.0, 0.0], '2': [0.0, 0.0, 0.0]}
