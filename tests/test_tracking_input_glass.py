@@ -105,13 +105,30 @@ def test_controllers_follow_hmd_forward_and_room_transform_applies_once():
 def test_dual_xbox_layout_simultaneous_and_disconnect():
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
     out,events=m.update(Input(True,{'x','y','start','back','lb','rb','ls','rs'},.35,.8,(.2,-.3),(-.4,.5)))
-    assert not events
+    assert events==['center_orientation']
     for side in (1,2):
-        assert out[side]['b'] and out[side]['system'] and out[side]['joy_btn']
+        assert out[side]['b'] and not out[side]['system'] and out[side]['joy_btn']
         assert out[side]['grip_pull']==1
     assert out[1]['trigger']==.35 and out[2]['trigger']==.8
     assert out[1]['joy_x']==.2 and out[2]['joy_x']==-.4
     assert m.update(Input())[0]=={1:{},2:{}}
+
+def test_center_chord_once_and_suppress_until_release():
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
+    assert m.update(Input(True,{'back','start'}))[1]==['center_orientation']
+    assert m.update(Input(True,{'back','start'}))[1]==[]
+    assert not m.update(Input(True,{'start'}))[0][2]['system']
+    m.update(Input(True,set()))
+    assert m.update(Input(True,{'start'}))[0][2]['system']
+
+def test_orientation_centering_preserves_position_and_tracks_subsequent_rotation():
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)
+    head=Rotation.from_euler('y',.7);s.history.append((10,head.as_matrix(),np.array([1,2,3.])))
+    palm=Rotation.from_euler('xyz',[.3,.5,-.2]);p0,_=s.transform(np.array([.1,0,.4]),palm.as_quat(),10,2)
+    s.center_orientation(palm.as_quat(),2)
+    p1,q=s.transform(np.array([.1,0,.4]),palm.as_quat(),10,2)
+    np.testing.assert_allclose(p0,p1)
+    np.testing.assert_allclose(Rotation.from_quat(q).as_matrix(),head.as_matrix(),atol=1e-12)
 
 def test_controller_forward_matches_finger_axis_instead_of_palm_normal():
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)

@@ -13,3 +13,4 @@ calibration.local.yaml
 artifacts/
 *.zip
 hardware.local.yaml
+orientation.local.yaml

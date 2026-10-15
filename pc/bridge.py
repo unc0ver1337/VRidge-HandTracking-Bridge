@@ -20,7 +20,7 @@ def main():
     server=Server(**cfg['network']); solver=Solver(**cfg['reconstruction']); identity=Identity()
     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}; glass=GlassVR(**cfg['glassvr']); space=Space(cfg['space'])
     inputs=InputManager(glass,cfg['xinput'],cfg['mapping']); current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); started=False
-    active_session=None; quality={};reasons={}
+    active_session=None; quality={};reasons={}; latest_orientation={}
     try:
         server.start(); started=True; space.start();inputs.start();run_start=time.monotonic()
         while True:
@@ -29,7 +29,17 @@ def main():
             buttons,events=inputs.take()
             if events:
                 for event in events:
-                    if event=='calibrate' and current:
+                    if event=='center_orientation':
+                        centered=[]
+                        for side,(quaternion,stamp) in latest_orientation.items():
+                            if now-stamp<.35:
+                                space.center_orientation(quaternion,side);centered.append(side)
+                        if centered:
+                            saved=Path(args.config).with_name('orientation.local.yaml')
+                            saved.write_text(yaml.safe_dump(cfg,sort_keys=False),encoding='utf8')
+                            log.info('Orientation centered for hands %s; saved %s (use --config to reload)',centered,saved)
+                        else:log.warning('Centering skipped: no fresh tracked hands')
+                    elif event=='calibrate' and current:
                         side,h,f=next(iter(current.values())); uv=h.points[:,:2]*[f.width,f.height]
                         rr=rays(uv,f.intrinsics,solver.distortion)
                         width=np.linalg.norm(rr[5]-rr[17])*cfg['calibration_distance_m']
@@ -47,7 +57,7 @@ def main():
             if item:
                 f,capture_pc,received=item; current={}
                 if f.session!=active_session:
-                    active_session=f.session;solver.previous.clear();identity=Identity()
+                    active_session=f.session;solver.previous.clear();identity=Identity();latest_orientation.clear()
                 if cfg.get('camera_intrinsics') is not None: f.intrinsics=np.asarray(cfg['camera_intrinsics'],float)
                 for side,hand in identity.update(f.hands,f.capture).items():
                     current[side]=(side,hand,f)
@@ -60,6 +70,7 @@ def main():
                         # stale cold-start result or overwrite fresh XInput state.
                         if time.monotonic()-capture_pc>.2:raise ValueError('solve exceeded pose freshness budget')
                         glass.send(side,p,q,{},pose.angles,include_input=False); inputs.tracked(side,time.monotonic())
+                        latest_orientation[side]=(pose.quaternion.copy(),time.monotonic())
                         solved_ms.append(pose.solve_ms)
                         quality[side]={'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
                     except ValueError as error:

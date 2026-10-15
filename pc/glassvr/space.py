@@ -54,6 +54,10 @@ class Space:
         position=h+r@self.offset+cr@p
         orientation=Rotation.from_matrix(cr)*Rotation.from_quat(q)*Rotation.from_euler('x',90,degrees=True)*grip
         return position,orientation.as_quat()
+    def center_orientation(self,q,side):
+        # Desired neutral grip is aligned with the headset, independent of room yaw.
+        basis=Rotation.from_matrix(self.mount)*Rotation.from_quat(q)*Rotation.from_euler('x',90,degrees=True)
+        self.config['grip_rotation_deg'][str(side)]=basis.inv().as_euler('xyz',degrees=True).tolist()
     def close(self):
         self.stop.set()
         if not self.static and hasattr(self,'thread'): self.thread.join(3)

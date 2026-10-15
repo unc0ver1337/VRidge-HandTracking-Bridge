@@ -39,12 +39,17 @@ class XInput:
         return Input(True,{k for k,m in MASK.items() if p.buttons&m},trigger(p.lt),trigger(p.rt),deadzone(p.lx/32768,p.ly/32768,self.zone),deadzone(p.rx/32768,p.ry/32768,self.zone))
 
 class Mapper:
-    def __init__(self,mapping): self.mapping=mapping; self.side=2; self.last=set(); self.split=True
+    def __init__(self,mapping): self.mapping=mapping; self.side=2; self.last=set(); self.split=True; self.chord=False
     def update(self,pad):
         m=self.mapping; events=[]; out={1:{},2:{}}
         down=pad.buttons-self.last; self.last=pad.buttons.copy()
         if not pad.connected: self.last=set(); return out,events
         if m.get('layout')=='dual':
+            chord_keys={m['left_system'],m['right_system']}
+            both=chord_keys.issubset(pad.buttons)
+            if both and not self.chord:events.append('center_orientation');self.chord=True
+            suppress_system=self.chord
+            if not chord_keys.intersection(pad.buttons):self.chord=False
             for side,prefix,stick in ((1,'left',pad.left),(2,'right',pad.right)):
                 b=out[side]
                 b['trigger']=float(getattr(pad,m[prefix+'_trigger']))
@@ -52,7 +57,7 @@ class Mapper:
                 b['grip_pull']=float(m[prefix+'_grip'] in pad.buttons)
                 b['grip_force']=b['grip_pull']
                 b['b']=m[prefix+'_menu'] in pad.buttons
-                b['system']=m[prefix+'_system'] in pad.buttons
+                b['system']=m[prefix+'_system'] in pad.buttons and not suppress_system
                 b['joy_btn']=m[prefix+'_stick_click'] in pad.buttons
                 b['joy_x'],b['joy_y']=stick
                 for key in ('b','system'):b[key+'_cap']=b[key]
