@@ -44,7 +44,7 @@ def test_glassvr_splay_and_curl_units():
     values=struct.unpack('<c25d',raw)[1:];assert abs(values[4]-1)<1e-9;assert abs(values[21]-1)<1e-9
 
 def test_input_switch_disconnect_and_analog():
-    cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper({k:v for k,v in cfg['mapping'].items() if k!='layout'})
     out,e=m.update(Input(True,{'lb','a'},.4,.7,(.2,.5),(.3,.1)))
     assert out[1]['a'] and out[1]['trigger']==.7 and out[1]['grip_pull']==.4
     out,e=m.update(Input(True,{'rb','a'}));assert not out[1].get('a',False) and out[2]['a']
@@ -58,13 +58,13 @@ def test_input_loop_releases_on_loss_without_camera_processing():
         def __init__(self):self.latest={}
         def input_only(self,side,buttons):self.latest[side]=buttons.copy()
     class Pad:
-        def poll(self):return Input(True,{'lb','a'})
+        def poll(self):return Input(True,{'lb','x'})
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text());sink=Sink();m=InputManager(sink,cfg['xinput'],cfg['mapping']);m.pad=Pad()
     m.tracked(1,time.monotonic());m.start()
     try:
         end=time.monotonic()+1
-        while not sink.latest.get(1,{}).get('a') and time.monotonic()<end:time.sleep(.01)
-        assert sink.latest[1]['a']
+        while not sink.latest.get(1,{}).get('b') and time.monotonic()<end:time.sleep(.01)
+        assert sink.latest[1]['b']
         # Reconstruction is absent/blocked; the independent loop still releases.
         with m.lock:m.valid_until[1]=0
         end=time.monotonic()+1
@@ -100,3 +100,25 @@ def test_controllers_follow_hmd_forward_and_room_transform_applies_once():
     room_r=Rotation.from_euler('y',-.4).as_matrix();room_p=np.array([2,0,1])
     standing_head=room_r@head_p+room_p;standing_hand=room_r@hand_p+room_p
     np.testing.assert_allclose((room_r@head_r).T@(standing_hand-standing_head),[.1,-.05,-.5],atol=1e-12)
+
+
+def test_dual_xbox_layout_simultaneous_and_disconnect():
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
+    out,events=m.update(Input(True,{'x','y','start','back','lb','rb','ls','rs'},.35,.8,(.2,-.3),(-.4,.5)))
+    assert not events
+    for side in (1,2):
+        assert out[side]['b'] and out[side]['system'] and out[side]['joy_btn']
+        assert out[side]['grip_pull']==1
+    assert out[1]['trigger']==.35 and out[2]['trigger']==.8
+    assert out[1]['joy_x']==.2 and out[2]['joy_x']==-.4
+    assert m.update(Input())[0]=={1:{},2:{}}
+
+def test_controller_forward_matches_finger_axis_instead_of_palm_normal():
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)
+    s.history.append((10,np.eye(3),np.zeros(3)))
+    for side in (1,2):
+        for angles in ([.2,.4,.1],[-.3,.8,-.2]):
+            palm=Rotation.from_euler('xyz',angles)
+            _,q=s.transform(np.array([0,0,.5]),palm.as_quat(),10,side)
+            expected=s.mount@palm.apply([0,1,0])
+            np.testing.assert_allclose(Rotation.from_quat(q).apply([0,0,-1]),expected,atol=1e-12)

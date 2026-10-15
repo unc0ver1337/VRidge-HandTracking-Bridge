@@ -44,6 +44,21 @@ class Mapper:
         m=self.mapping; events=[]; out={1:{},2:{}}
         down=pad.buttons-self.last; self.last=pad.buttons.copy()
         if not pad.connected: self.last=set(); return out,events
+        if m.get('layout')=='dual':
+            for side,prefix,stick in ((1,'left',pad.left),(2,'right',pad.right)):
+                b=out[side]
+                b['trigger']=float(getattr(pad,m[prefix+'_trigger']))
+                b['trigger_btn']=b['trigger']>.8
+                b['grip_pull']=float(m[prefix+'_grip'] in pad.buttons)
+                b['grip_force']=b['grip_pull']
+                b['b']=m[prefix+'_menu'] in pad.buttons
+                b['system']=m[prefix+'_system'] in pad.buttons
+                b['joy_btn']=m[prefix+'_stick_click'] in pad.buttons
+                b['joy_x'],b['joy_y']=stick
+                for key in ('b','system'):b[key+'_cap']=b[key]
+                b['joy_cap']=b['joy_btn'] or any(abs(v)>.01 for v in stick)
+                b['trigger_cap']=b['trigger']>.01;b['grip_cap']=b['grip_pull']>.01
+            return out,events
         if m['select_left'] in pad.buttons: self.side=1
         if m['select_right'] in pad.buttons: self.side=2
         if m['mode'] in down: self.split=not self.split

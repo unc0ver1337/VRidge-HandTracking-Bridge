@@ -52,7 +52,7 @@ class Space:
         r,h=self.pose_at(t); cr=r@self.mount
         grip=Rotation.from_euler('xyz',self.config['grip_rotation_deg'][str(side)],degrees=True)
         position=h+r@self.offset+cr@p
-        orientation=Rotation.from_matrix(cr)*Rotation.from_quat(q)*grip
+        orientation=Rotation.from_matrix(cr)*Rotation.from_quat(q)*Rotation.from_euler('x',90,degrees=True)*grip
         return position,orientation.as_quat()
     def close(self):
         self.stop.set()
