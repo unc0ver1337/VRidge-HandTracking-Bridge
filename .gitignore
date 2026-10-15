@@ -14,3 +14,5 @@ artifacts/
 *.zip
 hardware.local.yaml
 orientation.local.yaml
+*.spec
+dist/
