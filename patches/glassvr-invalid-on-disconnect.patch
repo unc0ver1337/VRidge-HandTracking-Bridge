@@ -1,5 +1,5 @@
 diff --git a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
-index 8dcbb63..42dc304 100644
+index 8dcbb63..1c42377 100644
 --- a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 +++ b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 @@ -97,30 +97,14 @@ vr::EVRInitError CSampleControllerDriver::Activate(vr::TrackedDeviceIndex_t unOb
@@ -53,14 +53,16 @@ index 8dcbb63..42dc304 100644
      pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
      pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
  
-@@ -374,6 +358,7 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
+@@ -374,7 +358,8 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
  
  void CSampleControllerDriver::UpdateSkeletalInput(PacketSkeletal& packet)
  {
+-    vr::VRBoneTransform_t boneTransforms[31];
 +    if (m_HSkeletal == vr::k_ulInvalidInputComponentHandle) return;
-     vr::VRBoneTransform_t boneTransforms[31];
++    vr::VRBoneTransform_t boneTransforms[31]{};
  
      MyFingerCurls curls = {
+         (float)packet.flexions[0],//thumb
 @@ -484,4 +469,4 @@ std::string CSampleControllerDriver::GetSerialNumber() const
      default:
          return "GlassVRCon";
