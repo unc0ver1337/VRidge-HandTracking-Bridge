@@ -42,8 +42,8 @@ space:
   - 0.0
 glassvr:
   host: 127.0.0.1
-  left_port: 9001
-  right_port: 9002
+  left_port: 9002
+  right_port: 9001
 xinput:
   index: 0
   deadzone_value: 0.18
