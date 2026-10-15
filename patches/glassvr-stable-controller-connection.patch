@@ -1,5 +1,5 @@
 diff --git a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
-index 8dcbb63..1c42377 100644
+index 8dcbb63..1900534 100644
 --- a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 +++ b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 @@ -97,30 +97,14 @@ vr::EVRInitError CSampleControllerDriver::Activate(vr::TrackedDeviceIndex_t unOb
@@ -41,19 +41,23 @@ index 8dcbb63..1c42377 100644
  
      vr::VRDriverInput()->CreateHapticComponent(m_ulPropertyContainer, "/output/haptic", &m_compHaptic);
  
-@@ -248,9 +232,9 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
+@@ -248,9 +232,13 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
      std::string device = right ? "cr" : "cl";
  
      vr::DriverPose_t pose = { 0 };
 -    pose.poseIsValid = true;
 -    pose.result = vr::TrackingResult_Running_OK;
++    // Register the controller once and keep it connected. Hand loss only marks
++    // tracking invalid, avoiding repeated TrackedDeviceAdded calls/ghost devices.
      pose.deviceIsConnected = right ? GetBoolFromSettingsByKey("enable cr") : GetBoolFromSettingsByKey("enable cl");
-+    pose.poseIsValid = pose.deviceIsConnected;
-+    pose.result = pose.deviceIsConnected ? vr::TrackingResult_Running_OK : vr::TrackingResult_Uninitialized;
++    const bool trackingValid = GetBoolFromSettingsByKey(device + " tracking");
++    pose.poseIsValid = pose.deviceIsConnected && trackingValid;
++    pose.result = !pose.deviceIsConnected ? vr::TrackingResult_Uninitialized
++        : (trackingValid ? vr::TrackingResult_Running_OK : vr::TrackingResult_Running_OutOfRange);
      pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
      pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
  
-@@ -374,7 +358,8 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
+@@ -374,7 +362,8 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
  
  void CSampleControllerDriver::UpdateSkeletalInput(PacketSkeletal& packet)
  {
@@ -63,7 +67,7 @@ index 8dcbb63..1c42377 100644
  
      MyFingerCurls curls = {
          (float)packet.flexions[0],//thumb
-@@ -484,4 +469,4 @@ std::string CSampleControllerDriver::GetSerialNumber() const
+@@ -484,4 +473,4 @@ std::string CSampleControllerDriver::GetSerialNumber() const
      default:
          return "GlassVRCon";
      }

@@ -7,7 +7,7 @@ UDP packets and skeletal simulation used here.
 
 Reviewed upstream revision: `4d530752a52febb39a3cb9ade3632e4c2ce77425`.
 The release contains a locally rebuilt GlassVR DLL with the small
-`patches/glassvr-invalid-on-disconnect.patch` change. Its original Viture object
+`patches/glassvr-stable-controller-connection.patch` change. Its original Viture object
 and import libraries were reused because the upstream SDK headers are absent.
 The build and this dependency limitation are recorded in
 `docs/DRIVER_VISIBILITY_FIX.md`. GlassVR and its bundled dependencies remain

@@ -8,7 +8,7 @@ class InputManager:
         self.glass=glass;self.pad=XInput(**xinput_config);self.mapper=Mapper(mapping)
         self.lock=threading.Lock();self.events=deque(maxlen=16);self.buttons={1:{},2:{}}
         self.valid_until={1:0,2:0};self.stop=threading.Event()
-        self.visibility=visibility;self.centering=False
+        self.presence=visibility;self.centering=False
     def start(self):
         self.thread=threading.Thread(target=self.run,name='xinput',daemon=True);self.thread.start()
     def tracked(self,side,now):
@@ -36,7 +36,7 @@ class InputManager:
                     self.buttons=buttons;self.events.extend(events)
                     safe={s:(buttons[s] if now<self.valid_until[s] else {}) for s in (1,2)}
                     visible={s:now<self.valid_until[s] for s in (1,2)}
-                if self.visibility:self.visibility.update(visible)
+                if self.presence:self.presence.update(visible)
                 for side in (1,2):self.glass.input_only(side,safe[side])
             except Exception:logging.getLogger(__name__).exception('XInput isolated error')
             self.stop.wait(.01)

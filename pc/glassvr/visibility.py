@@ -1,19 +1,22 @@
-"""GlassVR has no UDP validity bit; use its live per-device enable settings."""
+"""Keep GlassVR devices registered; only toggle tracking validity on hand loss."""
 import os,json,threading,logging
 from pathlib import Path
 
-class Visibility:
+class DevicePresence:
     def __init__(self,path=None):
         self.path=Path(path) if path else Path(os.environ['APPDATA'])/'glassvr/settings.json'
         self.desired={1:False,2:False};self.lock=threading.Lock();self.stop=threading.Event()
     def update(self,states):
-        with self.lock:self.desired=dict(states)
+        with self.lock:self.desired={1:bool(states[1]),2:bool(states[2])}
     def flush(self):
         with self.lock:states=dict(self.desired)
         data=json.loads(self.path.read_text(encoding='utf8'))
-        values={'enable cl':states[1],'enable cr':states[2]}
+        # Toggling enable cl/cr disconnects devices and makes GlassVR's RunFrame
+        # call TrackedDeviceAdded again on recovery. Keep both enabled for life.
+        values={'enable cl':True,'enable cr':True,
+                'tracking cl':states[1],'tracking cr':states[2]}
         if all(data.get(k)==v for k,v in values.items()):return
-        data.update(values);temp=self.path.with_name('settings.bridge-visibility.tmp')
+        data.update(values);temp=self.path.with_name('settings.bridge-state.tmp')
         temp.write_text(json.dumps(data,indent=4),encoding='utf8');temp.replace(self.path)
     def start(self):
         self.thread=threading.Thread(target=self.run,name='visibility',daemon=True);self.thread.start()
@@ -28,4 +31,4 @@ class Visibility:
         for _ in range(20):
             try:self.flush();return
             except (OSError,ValueError):self.stop.wait(.01)
-        logging.getLogger(__name__).warning('Could not disable GlassVR devices on shutdown')
+        logging.getLogger(__name__).warning('Could not invalidate GlassVR poses on shutdown')

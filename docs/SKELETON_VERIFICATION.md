@@ -16,6 +16,6 @@ python scripts/probe_skeleton.py
 
 ## Исправление повреждённых пальцев
 
-В upstream hand_simulation.cpp заполнялись только кости 0–25, а UpdateSkeletonComponent отправлял 31 элемент неинициализированного массива. Исправление patches/glassvr-initialize-aux-bones.patch вычисляет вспомогательные кости 26–30 в пространстве root через FK. Иерархия проверена через реальный OpenVR getBoneHierarchy. Применять вместе с glassvr-invalid-on-disconnect.patch.
+В upstream hand_simulation.cpp заполнялись только кости 0–25, а UpdateSkeletonComponent отправлял 31 элемент неинициализированного массива. Исправление patches/glassvr-initialize-aux-bones.patch вычисляет вспомогательные кости 26–30 в пространстве root через FK. Иерархия проверена через реальный OpenVR getBoneHierarchy. Применять вместе с glassvr-stable-controller-connection.patch.
 
 После установки DLL: 551 активное чтение правой руки, 31 кость, 0 кадров с нечисловыми координатами или ненормированными quaternion, максимальное расхождение aux и соответствующего кончика пальца 1.48e-7 м. Левая рука отсутствовала в проверке. Визуальное подтверждение пользователя требуется отдельно. Splay ограничен контрактом GlassVR [-1,1].
