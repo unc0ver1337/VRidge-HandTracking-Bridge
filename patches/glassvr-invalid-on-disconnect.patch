@@ -1,7 +1,47 @@
 diff --git a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
+index 8dcbb63..42dc304 100644
 --- a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 +++ b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
-@@ -248,9 +248,9 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
+@@ -97,30 +97,14 @@ vr::EVRInitError CSampleControllerDriver::Activate(vr::TrackedDeviceIndex_t unOb
+ 
+     vr::VRProperties()->SetInt32Property(m_ulPropertyContainer, vr::Prop_Axis0Type_Int32, vr::k_eControllerAxis_Joystick);
+ 
+-    if (right == false) {
+-        vr::VRDriverInput()->CreateSkeletonComponent(
+-            m_ulPropertyContainer,
+-            "/input/skeleton/left",
+-            "/skeleton/hand/left",
+-            "/pose/raw",
+-            vr::VRSkeletalTracking_Full,
+-            nullptr,
+-            0U,
+-            &m_HSkeletal
+-        );
+-    }
+-    else {
+-        vr::VRDriverInput()->CreateSkeletonComponent(
+-            m_ulPropertyContainer,
+-            "/input/skeleton/right",
+-            "/skeleton/hand/right",
+-            "/pose/raw",
+-            vr::VRSkeletalTracking_Full,
+-            nullptr,
+-            0U,
+-            &m_HSkeletal
+-        );
+-    }
++    const auto skeletonError = vr::VRDriverInput()->CreateSkeletonComponent(
++        m_ulPropertyContainer,
++        right ? "/input/skeleton/right" : "/input/skeleton/left",
++        right ? "/skeleton/hand/right" : "/skeleton/hand/left",
++        "/pose/raw", vr::VRSkeletalTracking_Partial, nullptr, 0U, &m_HSkeletal);
++    const std::string skeletonLog = "GlassVR skeleton side=" + std::to_string(right) +
++        " error=" + std::to_string(skeletonError) + " handle=" + std::to_string(m_HSkeletal);
++    vr::VRDriverLog()->Log(skeletonLog.c_str());
+ 
+     vr::VRDriverInput()->CreateHapticComponent(m_ulPropertyContainer, "/output/haptic", &m_compHaptic);
+ 
+@@ -248,9 +232,9 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
      std::string device = right ? "cr" : "cl";
  
      vr::DriverPose_t pose = { 0 };
@@ -13,3 +53,18 @@ diff --git a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp b/code-glassvr
      pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
      pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
  
+@@ -374,6 +358,7 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
+ 
+ void CSampleControllerDriver::UpdateSkeletalInput(PacketSkeletal& packet)
+ {
++    if (m_HSkeletal == vr::k_ulInvalidInputComponentHandle) return;
+     vr::VRBoneTransform_t boneTransforms[31];
+ 
+     MyFingerCurls curls = {
+@@ -484,4 +469,4 @@ std::string CSampleControllerDriver::GetSerialNumber() const
+     default:
+         return "GlassVRCon";
+     }
+-}
+\ No newline at end of file
++}
