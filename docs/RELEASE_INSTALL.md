@@ -1,4 +1,4 @@
-# Установка релиза v1.0.0
+# Установка релизов v1.0.x
 
 ## Что находится в ZIP
 
@@ -48,9 +48,12 @@ TrollStore/jailbreak/сервиса подписи нужно проверять
 2. Подключите Xbox 360/XInput-контроллер к Windows.
 3. Соедините iPhone и ПК с одной Wi-Fi/LAN сетью. Отключите client/AP isolation.
 4. Запустите `Windows/Start-Bridge.cmd`.
-5. Разрешите EXE в Windows Firewall для **частной сети**: UDP39570 и Bonjour/mDNS
-   UDP5353. При нескольких сетевых адаптерах/VPN задайте Wi-Fi IPv4 компьютера в
-   `network.advertise_ip` в `config.yaml`. IP телефона вводить не требуется.
+5. Разрешите EXE в Windows Firewall: UDP39570 и Bonjour/mDNS UDP5353.
+   В v1.0.1 все локальные IPv4-адаптеры, включая hotspot, обнаруживаются автоматически;
+   оставьте `network.advertise_ip: null`, `network.bind_ip: 0.0.0.0`.
+   Для Public hotspot при необходимости запустите `Windows/Allow-LAN-Firewall.ps1`
+   от администратора: правила ограничены LocalSubnet. Ручной advertise_ip — только
+   для намеренного ограничения одним адаптером. IP телефона вводить не требуется.
 6. Откройте изменённый VRidge. Console должна показать имя iPhone, `connected`,
    FPS, reconstruction time и показатели сети. Прежде чем играть, проверьте
    обе руки в SteamVR и корректность настроек драйвера.
