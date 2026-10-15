@@ -1,0 +1,15 @@
+diff --git a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
+--- a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
++++ b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
+@@ -248,9 +248,9 @@ vr::DriverPose_t CSampleControllerDriver::GetPose()
+     std::string device = right ? "cr" : "cl";
+ 
+     vr::DriverPose_t pose = { 0 };
+-    pose.poseIsValid = true;
+-    pose.result = vr::TrackingResult_Running_OK;
+     pose.deviceIsConnected = right ? GetBoolFromSettingsByKey("enable cr") : GetBoolFromSettingsByKey("enable cl");
++    pose.poseIsValid = pose.deviceIsConnected;
++    pose.result = pose.deviceIsConnected ? vr::TrackingResult_Running_OK : vr::TrackingResult_Uninitialized;
+     pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
+     pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
+ 
