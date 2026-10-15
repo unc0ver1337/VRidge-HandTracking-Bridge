@@ -16,6 +16,7 @@ class Space:
         self.mount=Rotation.from_euler('xyz',config['camera_rotation_deg'],degrees=True).as_matrix()@np.diag([1,-1,-1])
         self.offset=np.asarray(config['camera_offset_m'],float); self.static=config['mode']=='static'
         self.origin=np.array(config.get('static_origin_m',[0,1.6,0]),float)
+        self.tip={1:Rotation.identity(),2:Rotation.identity()}
     def start(self):
         if not self.static:
             self.thread=threading.Thread(target=self.poll,name='openvr',daemon=True); self.thread.start()
@@ -24,7 +25,12 @@ class Space:
         initialized=False
         while not self.stop.is_set():
             try:
-                if not initialized: openvr.init(openvr.VRApplication_Background); initialized=True
+                if not initialized:
+                    openvr.init(openvr.VRApplication_Background); initialized=True
+                    rm=openvr.VRRenderModels()
+                    for side,name in ((1,'left'),(2,'right')):
+                        ok,state=rm.getComponentState('{indexcontroller}valve_controller_knu_1_0_'+name,'tip',openvr.VRControllerState_t(),openvr.RenderModel_ControllerMode_State_t())
+                        if ok:self.tip[side]=Rotation.from_matrix(np.array(state.mTrackingToComponentLocal.m)[:,:3])
                 poses=openvr.VRSystem().getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseRawAndUncalibrated,0,openvr.k_unMaxTrackedDeviceCount)
                 hmd=poses[openvr.k_unTrackedDeviceIndex_Hmd]
                 if hmd.bPoseIsValid and hmd.bDeviceIsConnected:
@@ -57,7 +63,7 @@ class Space:
     def center_orientation(self,q,side):
         # Desired neutral grip is aligned with the headset, independent of room yaw.
         basis=Rotation.from_matrix(self.mount)*Rotation.from_quat(q)*Rotation.from_euler('x',90,degrees=True)
-        self.config['grip_rotation_deg'][str(side)]=basis.inv().as_euler('xyz',degrees=True).tolist()
+        self.config['grip_rotation_deg'][str(side)]=(basis.inv()*self.tip[side].inv()).as_euler('xyz',degrees=True).tolist()
     def close(self):
         self.stop.set()
         if not self.static and hasattr(self,'thread'): self.thread.join(3)

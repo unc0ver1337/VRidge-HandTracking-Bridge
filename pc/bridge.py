@@ -12,6 +12,7 @@ from .reconstruction.model import rays
 from .controller.manager import InputManager
 from .glassvr.adapter import GlassVR
 from .glassvr.space import Space
+from .glassvr.visibility import Visibility
 
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument('--config',default='pc/config.yaml'); parser.add_argument('--log',default='bridge.log');parser.add_argument('--duration',type=float,default=0,help='Optional diagnostic runtime in seconds'); args=parser.parse_args()
@@ -19,14 +20,15 @@ def main():
     log=logging.getLogger('bridge'); cfg=yaml.safe_load(Path(args.config).read_text())
     server=Server(**cfg['network']); solver=Solver(**cfg['reconstruction']); identity=Identity()
     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}; glass=GlassVR(**cfg['glassvr']); space=Space(cfg['space'])
-    inputs=InputManager(glass,cfg['xinput'],cfg['mapping']); current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); started=False
+    visibility=Visibility();inputs=InputManager(glass,cfg['xinput'],cfg['mapping'],visibility); current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); started=False
     active_session=None; quality={};reasons={}; latest_orientation={}
     try:
-        server.start(); started=True; space.start();inputs.start();run_start=time.monotonic()
+        server.start(); started=True; space.start();visibility.start();inputs.start();run_start=time.monotonic()
         while True:
             now=time.monotonic()
             if args.duration>0 and now-run_start>=args.duration:break
             buttons,events=inputs.take()
+            centering='center_orientation' in events
             if events:
                 for event in events:
                     if event=='center_orientation':
@@ -34,11 +36,11 @@ def main():
                         for side,(quaternion,stamp) in latest_orientation.items():
                             if now-stamp<.35:
                                 space.center_orientation(quaternion,side);centered.append(side)
-                        if centered:
+                    elif event=='center_orientation_release':
+                        if latest_orientation:
                             saved=Path(args.config).with_name('orientation.local.yaml')
                             saved.write_text(yaml.safe_dump(cfg,sort_keys=False),encoding='utf8')
-                            log.info('Orientation centered for hands %s; saved %s (use --config to reload)',centered,saved)
-                        else:log.warning('Centering skipped: no fresh tracked hands')
+                            log.info('Continuous orientation centering released; saved %s',saved)
                     elif event=='calibrate' and current:
                         side,h,f=next(iter(current.values())); uv=h.points[:,:2]*[f.width,f.height]
                         rr=rays(uv,f.intrinsics,solver.distortion)
@@ -63,9 +65,11 @@ def main():
                     current[side]=(side,hand,f)
                     try:
                         pose=solver.solve(hand,f,side)
+                        if centering:space.center_orientation(pose.quaternion,side)
                         # Transform using head pose at CAPTURE, filter in WORLD coordinates.
                         p,q=space.transform(pose.position,pose.quaternion,capture_pc,side)
-                        p,q=filters[side].update(p,q,capture_pc)
+                        target_q=q.copy();p,q=filters[side].update(p,q,capture_pc)
+                        if centering:q=target_q;filters[side].q=q.copy()
                         # Drop results that spent too long optimizing; never render a
                         # stale cold-start result or overwrite fresh XInput state.
                         if time.monotonic()-capture_pc>.2:raise ValueError('solve exceeded pose freshness budget')
@@ -86,7 +90,7 @@ def main():
             time.sleep(.001)
     except KeyboardInterrupt: log.info('Stopping; releasing controller input')
     finally:
-        inputs.close();glass.close(); space.close()
+        inputs.close();visibility.close();glass.close(); space.close()
         server.close()
 
 if __name__=='__main__': main()
