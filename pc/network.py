@@ -1,6 +1,7 @@
-import json,logging,secrets,socket,threading,time,uuid
+import json,logging,secrets,socket,threading,time,uuid,ipaddress
 from collections import deque
 from .protocol import decode,Sequence,VERSION
+from .interfaces import local_ipv4
 
 LOG=logging.getLogger(__name__)
 SERVICE='_vhbridge._udp.local.'
@@ -13,20 +14,39 @@ class Server:
         self.peer=None; self.session=0; self.last_seen=0; self.seq=Sequence(); self.offset=None; self.rtt=float('inf')
         self.invalid=0; self.replaced=0; self.clock_rejected=0
         self.clock_samples=deque(maxlen=120);self.registered=False
+        self.announcements={}
     def start(self):
         from zeroconf import Zeroconf,ServiceInfo
         self.sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); self.sock.bind((self.bind_ip,self.port)); self.sock.settimeout(.2)
-        if self.advertise_ip: ip=self.advertise_ip
-        else:
-            # Route lookup chooses the LAN address without sending a datagram.
-            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as route:
-                route.connect(('192.0.2.1',9)); ip=route.getsockname()[0]
-        self.zc=Zeroconf(interfaces=[ip])
-        self.service=ServiceInfo(SERVICE,'GlassVR iPhone Bridge.'+SERVICE,addresses=[socket.inet_aton(ip)],port=self.port,properties={'protocol':'VHBR','version':str(VERSION),'instance':str(uuid.uuid4())},server=socket.gethostname()+'.local.')
-        self.zc.register_service(self.service)
-        self.registered=True
+        self.announce_thread=threading.Thread(target=self.watch_interfaces,name='discovery-interfaces',daemon=True);self.announce_thread.start()
         self.thread=threading.Thread(target=self.run,name='network',daemon=True); self.thread.start()
-        LOG.info('Bonjour GlassVR iPhone Bridge %s:%d',ip,self.port)
+        LOG.info('UDP listening %s:%d; discovery on every IPv4 adapter',self.bind_ip,self.port)
+    def refresh_interfaces(self):
+        from zeroconf import Zeroconf,ServiceInfo,IPVersion
+        wanted=set(local_ipv4(self.advertise_ip,self.bind_ip))
+        for ip in set(self.announcements)-wanted:
+            zc,service=self.announcements.pop(ip)
+            try:zc.unregister_service(service)
+            finally:zc.close()
+        for ip in sorted(wanted-set(self.announcements),key=lambda value:(ipaddress.ip_address(value).is_link_local,value)):
+            if self.stop.is_set():break
+            zc=None
+            try:
+                zc=Zeroconf(interfaces=[ip],ip_version=IPVersion.V4Only)
+                # Separate names/host records prevent an iPhone on the hotspot
+                # from receiving the unrelated Ethernet/VPN address first.
+                suffix=ip.replace('.','-')
+                service=ServiceInfo(SERVICE,'GlassVR iPhone Bridge '+suffix+'.'+SERVICE,addresses=[socket.inet_aton(ip)],port=self.port,properties={'protocol':'VHBR','version':str(VERSION),'instance':str(uuid.uuid4())},server='vhbridge-'+suffix+'.local.')
+                zc.register_service(service);self.announcements[ip]=(zc,service)
+                LOG.info('Bonjour enabled on %s:%d',ip,self.port)
+            except Exception as error:
+                if zc:zc.close()
+                LOG.warning('Discovery unavailable on %s: %s; retrying',ip,error)
+    def watch_interfaces(self):
+        while not self.stop.is_set():
+            try:self.refresh_interfaces()
+            except Exception:LOG.exception('Interface refresh failed; will retry')
+            self.stop.wait(5)
     def send(self,obj,addr): self.sock.sendto(json.dumps(obj,separators=(',',':')).encode(),addr)
     def control(self,msg,addr,now):
         if msg.get('v')!=VERSION or msg.get('protocol')!='VHBR': raise ValueError('control protocol')
@@ -81,8 +101,10 @@ class Server:
     def close(self):
         self.stop.set()
         if hasattr(self,'thread'):self.thread.join(1)
+        if hasattr(self,'announce_thread'):self.announce_thread.join(8)
         if hasattr(self,'sock'):self.sock.close()
-        if hasattr(self,'zc'):
+        for zc,service in list(self.announcements.values()):
             try:
-                if self.registered:self.zc.unregister_service(self.service)
-            finally:self.zc.close()
+                zc.unregister_service(service)
+            finally:zc.close()
+        self.announcements.clear()
