@@ -135,12 +135,16 @@
     if(_busy.exchange(true))return;
     CVPixelBufferRef source=CMSampleBufferGetImageBuffer(sample); size_t sw=CVPixelBufferGetWidth(source),sh=CVPixelBufferGetHeight(source);
     CVPixelBufferRef scaled=nullptr;
-    if(!_pool||CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault,_pool,&scaled)!=kCVReturnSuccess){_busy=false;return;}
+    const bool nativeSize=(sw==(size_t)_width&&sh==(size_t)_height);
+    if(nativeSize){scaled=source;CVPixelBufferRetain(scaled);}
+    else if(!_pool||CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault,_pool,&scaled)!=kCVReturnSuccess){_busy=false;return;}
     // Centre-crop preserving aspect. Apply the identical affine transform to K.
     double scale=MAX((double)_width/sw,(double)_height/sh); double ox=(_width-sw*scale)/2,oy=(_height-sh*scale)/2;
-    CIImage *image=[CIImage imageWithCVPixelBuffer:source];
-    image=[image imageByApplyingTransform:CGAffineTransformMake(scale,0,0,scale,ox,oy)];
-    [_context render:image toCVPixelBuffer:scaled bounds:CGRectMake(0,0,_width,_height) colorSpace:nil];
+    if(!nativeSize){
+        CIImage *image=[CIImage imageWithCVPixelBuffer:source];
+        image=[image imageByApplyingTransform:CGAffineTransformMake(scale,0,0,scale,ox,oy)];
+        [_context render:image toCVPixelBuffer:scaled bounds:CGRectMake(0,0,_width,_height) colorSpace:nil];
+    }
     VHHeader header={}; memcpy(header.magic,"VHBR",4);header.version=1;header.sequence=_sequence++; header.width=_width;header.height=_height;
     // Convert sample time from capture session clock into host clock used by sync.
     CMTime pts=CMSampleBufferGetPresentationTimeStamp(sample);

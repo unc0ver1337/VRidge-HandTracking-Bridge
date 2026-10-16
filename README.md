@@ -9,6 +9,10 @@
 discovery/протокол, реконструкция, фильтрация, привязка к HMD, Xbox mapping,
 центровка и патч GlassVR, который удерживает контроллеры подключёнными и обновляет tracking-valid state.
 
+## Версия 1.1
+
+30 FPS, отдельная оценка ладони и артикуляции, удержание перекрытых пальцев, исправленный tracking state GlassVR. [Изменения и ограничения](docs/RELEASE_1_1.md).
+
 ## Скачать и запустить
 
 **[ZIP в Releases](https://github.com/vanyaponpon1337-web/VRidge-HandTracking-Bridge/releases)**

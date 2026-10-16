@@ -21,3 +21,8 @@ def test_center_actual_tip_instead_of_controller_body():
         _,q=s.transform(np.array([0,0,.4]),palm.as_quat(),10,2)
         ray=Rotation.from_quat(q)*s.tip[2]
         np.testing.assert_allclose(ray.apply([0,0,-1]),head.apply([0,0,-1]),atol=1e-12)
+
+def test_driver_and_bridge_tracking_key_contract():
+    patch=Path('patches/glassvr-stable-controller-connection.patch').read_text()
+    assert 'GetBoolFromSettingsByKey("tracking " + device)' in patch
+    assert 'device + " tracking"' not in patch

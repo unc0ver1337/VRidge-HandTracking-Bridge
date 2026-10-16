@@ -35,3 +35,19 @@ def test_complete_private_packaging_metadata_and_preservation(tmp_path):
         assert pl['NSBonjourServices']==['_original._udp','_vhbridge._udp']
         assert z.read('Payload/Original.app/Original')[4096:]==macho()[4096:]
         assert z.read('Payload/Original.app/resource.bin')==b'KEEP_ORIGINAL_RESOURCE'
+
+def test_update_injected_ipa_preserves_executable(tmp_path):
+    from scripts.update_injected_ipa import update
+    original=tmp_path/'in.ipa';output=tmp_path/'out.ipa';dll=tmp_path/'new.dylib';settings=tmp_path/'settings.plist'
+    binary=inject(macho());dll.write_bytes(b'NEW_DYLIB');settings.write_bytes(plistlib.dumps({'FPS':30}))
+    root='Payload/App.app/'
+    with zipfile.ZipFile(original,'w') as z:
+        z.writestr(root+'Info.plist',plistlib.dumps({'CFBundleExecutable':'App'}))
+        z.writestr(root+'App',binary);z.writestr(root+'Frameworks/VRidgeHandTracking.dylib',b'OLD')
+        z.writestr(root+'VHBridge.plist',b'OLD');z.writestr(root+'_CodeSignature/CodeResources',b'OLD_SIGNATURE')
+    update(original,dll,settings,output)
+    with zipfile.ZipFile(output) as z:
+        assert z.read(root+'App')==binary
+        assert z.read(root+'Frameworks/VRidgeHandTracking.dylib')==b'NEW_DYLIB'
+        assert plistlib.loads(z.read(root+'VHBridge.plist'))['FPS']==30
+        assert root+'_CodeSignature/CodeResources' not in z.namelist()

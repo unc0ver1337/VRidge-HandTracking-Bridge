@@ -1,5 +1,5 @@
 diff --git a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
-index 8dcbb63..1900534 100644
+index 8dcbb63..b1451c6 100644
 --- a/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 +++ b/code-glassvrdriver/HmdVr/devices/indexcontroller.cpp
 @@ -97,30 +97,14 @@ vr::EVRInitError CSampleControllerDriver::Activate(vr::TrackedDeviceIndex_t unOb
@@ -50,7 +50,7 @@ index 8dcbb63..1900534 100644
 +    // Register the controller once and keep it connected. Hand loss only marks
 +    // tracking invalid, avoiding repeated TrackedDeviceAdded calls/ghost devices.
      pose.deviceIsConnected = right ? GetBoolFromSettingsByKey("enable cr") : GetBoolFromSettingsByKey("enable cl");
-+    const bool trackingValid = GetBoolFromSettingsByKey(device + " tracking");
++    const bool trackingValid = GetBoolFromSettingsByKey("tracking " + device);
 +    pose.poseIsValid = pose.deviceIsConnected && trackingValid;
 +    pose.result = !pose.deviceIsConnected ? vr::TrackingResult_Uninitialized
 +        : (trackingValid ? vr::TrackingResult_Running_OK : vr::TrackingResult_Running_OutOfRange);

@@ -55,3 +55,27 @@ def test_rigid_calibration():
     a=np.array([[0,0,0],[1,0,0],[0,1,0],[0,0,1]],float);r=Rotation.from_euler('xyz',[.2,.3,.4]).as_matrix();t=np.array([.1,.2,.3]);b=a@r.T+t
     rr,tt,error=rigid_alignment(a,b);np.testing.assert_allclose(rr,r,atol=1e-12);np.testing.assert_allclose(tt,t);assert error<1e-10
     with pytest.raises(ValueError):rigid_alignment(a[:2],b[:2])
+
+@pytest.mark.parametrize('side',[1,2])
+def test_finger_motion_does_not_change_rigid_palm_pose(side):
+    _,_,hand,frame=synthetic(side=side,flex=.1)
+    sa=Solver(max_evaluations=50);sb=Solver(max_evaluations=50)
+    sa.solve(hand,frame,side);sb.solve(hand,frame,side)
+    frame.capture+=1/30
+    a=sa.solve(hand,frame,side)
+    _,_,changed,other=synthetic(side=side,flex=.6);other.capture=frame.capture
+    b=sb.solve(changed,other,side)
+    np.testing.assert_allclose(a.position,b.position,atol=1e-10)
+    np.testing.assert_allclose(a.quaternion,b.quaternion,atol=1e-10)
+
+def test_invalid_coordinates_rejected_before_optimization():
+    _,_,hand,frame=synthetic();hand.points[8,0]=np.nan
+    with pytest.raises(ValueError):Solver().solve(hand,frame,2)
+
+@pytest.mark.parametrize('side',[1,2])
+def test_bad_fingertips_do_not_remove_good_palm(side):
+    _,_,h,f=synthetic(side=side);solver=Solver();old=solver.solve(h,f,side)
+    f.capture+=1/30;h.points[6:9,:2]+=.3
+    out=solver.solve(h,f,side)
+    assert out.palm_rmse<3 and not out.finger_valid[1]
+    np.testing.assert_allclose(out.angles[1],old.angles[1])
