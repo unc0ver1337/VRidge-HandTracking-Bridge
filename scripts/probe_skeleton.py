@@ -37,7 +37,7 @@ try:
       wp=pos.copy();wr=Rotation.from_quat(quat)
       for i in range(1,26):
        parent=parents[i];wp[i]=wp[parent]+wr[parent].apply(pos[i]);wr[i]=wr[parent]*wr[i]
-      error=float(np.max(np.linalg.norm(wp[[5,10,15,20,25]]-pos[26:31],axis=1)))
+      error=float(np.max(np.linalg.norm(wp[[4,9,14,19,24]]-pos[26:31],axis=1)))
       entry['max_aux_tip_error_m']=max(entry['max_aux_tip_error_m'],error)
      entry['samples'].append([[b.orientation.w,b.orientation.x,b.orientation.y,b.orientation.z] for b in bones])
    except Exception as e:entry['errors'].add(type(e).__name__+': '+str(e))

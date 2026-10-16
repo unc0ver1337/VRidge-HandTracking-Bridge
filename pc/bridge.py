@@ -48,10 +48,7 @@ def main():
                             if now-stamp<.35:
                                 space.center_orientation(quaternion,side);centered.append(side)
                     elif event=='center_orientation_release':
-                        if latest_orientation:
-                            saved=Path(args.config).with_name('orientation.local.yaml')
-                            saved.write_text(yaml.safe_dump(cfg,sort_keys=False),encoding='utf8')
-                            log.info('Continuous orientation centering released; saved %s',saved)
+                        log.info('Manual centering released; correction retained for this session only')
                     elif event=='calibrate' and current:
                         side,h,f=next(iter(current.values())); uv=h.points[:,:2]*[f.width,f.height]
                         rr=rays(uv,f.intrinsics,solver.distortion)

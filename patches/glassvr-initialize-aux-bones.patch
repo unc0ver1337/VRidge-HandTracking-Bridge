@@ -1,5 +1,5 @@
 diff --git a/code-glassvrdriver/HmdVr/devices/hand_simulation.cpp b/code-glassvrdriver/HmdVr/devices/hand_simulation.cpp
-index 0f6844c..f76c069 100644
+index 0f6844c..6ea2cb6 100644
 --- a/code-glassvrdriver/HmdVr/devices/hand_simulation.cpp
 +++ b/code-glassvrdriver/HmdVr/devices/hand_simulation.cpp
 @@ -260,6 +260,32 @@ void MyHandSimulation::ComputeSkeletonTransforms(vr::ETrackedControllerRole role
@@ -10,7 +10,7 @@ index 0f6844c..f76c069 100644
 +	// Now compute all articulated bones.
  	ComputeSkeletalTransforms(hand, out_transforms);
 +
-+	// Auxiliary bones are fingertip transforms relative to root (parent 0),
++	// Auxiliary bones are distal-knuckle transforms relative to root (parent 0),
 +	// not finger-local transforms. Home uses these for hand animation.
 +	const int parents[26] = {-1,0,1,2,3,4,1,6,7,8,9,1,11,12,13,14,1,16,17,18,19,1,21,22,23,24};
 +	vr::HmdQuaternion_t rotations[26];
@@ -28,7 +28,7 @@ index 0f6844c..f76c069 100644
 +		rotations[i] = q;
 +		positions[i] = p;
 +	}
-+	const int tips[5] = {5,10,15,20,25};
++	const int tips[5] = {4,9,14,19,24};
 +	for (int finger = 0; finger < 5; ++finger) {
 +		auto& aux = out_transforms[26 + finger];
 +		HmdQuaternion_ConvertQuaternion(rotations[tips[finger]], aux.orientation);

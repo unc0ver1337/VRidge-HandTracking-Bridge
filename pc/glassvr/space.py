@@ -16,7 +16,7 @@ class Space:
         self.mount=Rotation.from_euler('xyz',config['camera_rotation_deg'],degrees=True).as_matrix()@np.diag([1,-1,-1])
         self.offset=np.asarray(config['camera_offset_m'],float); self.static=config['mode']=='static'
         self.origin=np.array(config.get('static_origin_m',[0,1.6,0]),float)
-        self.tip={1:Rotation.identity(),2:Rotation.identity()}
+        self.tip={1:Rotation.identity(),2:Rotation.identity()};self.session_grip={1:Rotation.identity(),2:Rotation.identity()}
     def start(self):
         if not self.static:
             self.thread=threading.Thread(target=self.poll,name='openvr',daemon=True); self.thread.start()
@@ -56,14 +56,14 @@ class Space:
         return rot.as_matrix(),a[2]*(1-f)+b[2]*f
     def transform(self,p,q,t,side):
         r,h=self.pose_at(t); cr=r@self.mount
-        grip=Rotation.from_euler('xyz',self.config['grip_rotation_deg'][str(side)],degrees=True)
+        grip=self.session_grip[side]
         position=h+r@self.offset+cr@p
         orientation=Rotation.from_matrix(cr)*Rotation.from_quat(q)*Rotation.from_euler('x',90,degrees=True)*grip
         return position,orientation.as_quat()
     def center_orientation(self,q,side):
         # Desired neutral grip is aligned with the headset, independent of room yaw.
         basis=Rotation.from_matrix(self.mount)*Rotation.from_quat(q)*Rotation.from_euler('x',90,degrees=True)
-        self.config['grip_rotation_deg'][str(side)]=(basis.inv()*self.tip[side].inv()).as_euler('xyz',degrees=True).tolist()
+        self.session_grip[side]=basis.inv()*self.tip[side].inv()
     def close(self):
         self.stop.set()
         if not self.static and hasattr(self,'thread'): self.thread.join(3)
