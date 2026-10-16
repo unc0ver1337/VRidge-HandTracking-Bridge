@@ -152,7 +152,7 @@ def test_duplicate_chirality_keeps_two_existing_roles():
     assert result[2].points[0,0]==.31
 
 def test_arrival_order_ignores_vision_side():
-    tr=Identity();right=hand(1,.3);left=hand(2,.7)
+    tr=Identity(mode="first_right");right=hand(1,.3);left=hand(2,.7)
     assert tr.update([right],0)[2] is right
     out=tr.update([left,right],.03)
     assert out[2] is right and out[1] is left
@@ -161,4 +161,9 @@ def test_arrival_order_ignores_vision_side():
     assert set(tr.update([left],1.1))=={2}
 
 def test_simultaneous_first_hands_require_single_hand_initialization():
-    assert Identity().update([hand(2,.3),hand(2,.7)],0)=={}
+    assert Identity(mode="first_right").update([hand(2,.3),hand(2,.7)],0)=={}
+
+def test_default_identity_uses_vision_side_not_arrival_order():
+    tracker=Identity()
+    assert set(tracker.update([hand(1,.3)],0))=={1}
+    assert set(tracker.update([hand(1,.31),hand(2,.7)],.03))=={1,2}

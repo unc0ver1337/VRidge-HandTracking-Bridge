@@ -7,7 +7,7 @@ class Identity:
     Fully occluded crossing is intrinsically ambiguous; unmatched stale slots expire.
     iOS observation IDs are hints, not a license to swap controller roles.
     """
-    def __init__(self, retention=0.7, mode='first_right'):
+    def __init__(self, retention=0.7, mode='vision'):
         if mode not in ('first_right','vision'):raise ValueError('identity mode')
         self.slots={};self.retention=retention;self.mode=mode
     def arrival_update(self,hands,t):
