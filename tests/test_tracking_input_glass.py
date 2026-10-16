@@ -15,13 +15,13 @@ def hand(side,x):
     p=np.full((21,3),.8);p[:,0]=x;return Hand(side,side,0,p)
 
 def test_identity_crossing_and_chirality_flicker():
-    tracker=Identity();assert set(tracker.update([hand(1,.2),hand(2,.8)],0))=={1,2}
+    tracker=Identity(mode="vision");assert set(tracker.update([hand(1,.2),hand(2,.8)],0))=={1,2}
     tracker.update([hand(1,.4),hand(2,.6)],.1)
     out=tracker.update([hand(2,.58),hand(1,.42)],.2)
     assert out[1].points[0,0]==.58 and out[2].points[0,0]==.42
 
 def test_disappear_and_reacquire():
-    tr=Identity(); tr.update([hand(1,.3)],0);assert tr.update([],.1)=={}
+    tr=Identity(mode="vision"); tr.update([hand(1,.3)],0);assert tr.update([],.1)=={}
     assert 1 in tr.update([hand(1,.32)],.3)
     assert tr.update([hand(1,.9)],1.2)[1].points[0,0]==.9
 
@@ -150,3 +150,15 @@ def test_duplicate_chirality_keeps_two_existing_roles():
     result=identity.update([hand(.31,2),hand(.7,2)],1.03)
     assert set(result)=={1,2}
     assert result[2].points[0,0]==.31
+
+def test_arrival_order_ignores_vision_side():
+    tr=Identity();right=hand(1,.3);left=hand(2,.7)
+    assert tr.update([right],0)[2] is right
+    out=tr.update([left,right],.03)
+    assert out[2] is right and out[1] is left
+    assert tr.update([left],.1)[1] is left
+    assert tr.update([],1)=={}
+    assert set(tr.update([left],1.1))=={2}
+
+def test_simultaneous_first_hands_require_single_hand_initialization():
+    assert Identity().update([hand(2,.3),hand(2,.7)],0)=={}

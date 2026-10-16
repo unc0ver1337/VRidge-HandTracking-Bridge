@@ -7,8 +7,31 @@ class Identity:
     Fully occluded crossing is intrinsically ambiguous; unmatched stale slots expire.
     iOS observation IDs are hints, not a license to swap controller roles.
     """
-    def __init__(self, retention=0.7): self.slots={}; self.retention=retention
+    def __init__(self, retention=0.7, mode='first_right'):
+        if mode not in ('first_right','vision'):raise ValueError('identity mode')
+        self.slots={};self.retention=retention;self.mode=mode
+    def arrival_update(self,hands,t):
+        self.slots={s:v for s,v in self.slots.items() if 0<=t-v['t']<self.retention}
+        # No observation ordering can reveal which of two simultaneous hands
+        # arrived first. Wait for the user to establish a single right hand.
+        if not self.slots and len(hands)>1:return {}
+        output={};used=set();sides=list(self.slots)
+        if sides and hands:
+            cost=np.array([[np.linalg.norm(h.points[0,:2]-(self.slots[s]['p']+self.slots[s]['v']*min(t-self.slots[s]['t'],.1))) for h in hands] for s in sides])
+            rows,cols=linear_sum_assignment(cost)
+            for i,j in zip(rows,cols):
+                if cost[i,j]<.32:output[sides[i]]=hands[j];used.add(j)
+        for j,h in enumerate(hands):
+            if j in used:continue
+            available=[s for s in (2,1) if s not in self.slots and s not in output]
+            if available:output[available[0]]=h
+        for s,h in output.items():
+            p=h.points[0,:2].copy();old=self.slots.get(s)
+            v=(p-old['p'])/max(t-old['t'],1e-3) if old else np.zeros(2)
+            self.slots[s]={'p':p,'v':v,'t':t}
+        return output
     def update(self,hands,t):
+        if self.mode=='first_right':return self.arrival_update(hands,t)
         self.slots={s:v for s,v in self.slots.items() if t-v['t']<self.retention}
         output={}; used=set()
         sides=list(self.slots)

@@ -26,6 +26,7 @@ def main():
             if isinstance(port,int) and 1<=port<=65535:
                 if cfg['glassvr'][side+'_port']!=port:log.warning('Aligning %s UDP port with installed GlassVR: %d',side,port)
                 cfg['glassvr'][side+'_port']=port
+    log.info('Hand roles: show RIGHT alone first, then LEFT; after both hands are lost for 0.7s initialize RIGHT again')
     log.info('GlassVR UDP ports: left=%d right=%d',cfg['glassvr']['left_port'],cfg['glassvr']['right_port'])
     server=Server(**cfg['network']); solver=Solver(**cfg['reconstruction']); identity=Identity()
     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}; glass=GlassVR(**cfg['glassvr']); space=Space(cfg['space'])
