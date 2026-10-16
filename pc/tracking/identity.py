@@ -25,6 +25,14 @@ class Identity:
         for j,h in enumerate(hands):
             if j not in used and h.side in (1,2) and h.side not in output and h.side not in self.slots:
                 output[h.side]=h
+        # If one semantic slot was already established, two simultaneous
+        # observations must not collapse into it when Vision duplicates chirality.
+        # Only infer the remaining role from an established matched role, never X.
+        if len(hands)==2 and len(output)==1 and sides:
+            missing=({1,2}-set(output)).pop()
+            remaining=[j for j in range(2) if j not in used]
+            if len(remaining)==1:
+                output[missing]=hands[remaining[0]]
         for s,h in output.items():
             p=h.points[0,:2].copy(); old=self.slots.get(s)
             v=(p-old['p'])/max(t-old['t'],1e-3) if old else np.zeros(2)

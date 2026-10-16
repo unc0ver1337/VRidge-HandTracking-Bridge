@@ -139,3 +139,14 @@ def test_controller_forward_matches_finger_axis_instead_of_palm_normal():
             _,q=s.transform(np.array([0,0,.5]),palm.as_quat(),10,side)
             expected=s.mount@palm.apply([0,1,0])
             np.testing.assert_allclose(Rotation.from_quat(q).apply([0,0,-1]),expected,atol=1e-12)
+
+def test_duplicate_chirality_keeps_two_existing_roles():
+    from pc.tracking.identity import Identity
+    from pc.protocol import Hand
+    identity=Identity()
+    def hand(x,side):
+        points=np.tile([x,.5,1.],(21,1));return Hand(side,side,0,points)
+    assert set(identity.update([hand(.3,2)],1.))=={2}
+    result=identity.update([hand(.31,2),hand(.7,2)],1.03)
+    assert set(result)=={1,2}
+    assert result[2].points[0,0]==.31
