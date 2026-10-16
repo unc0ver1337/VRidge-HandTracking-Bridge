@@ -35,6 +35,6 @@ class PoseFilter:
         self.raw=p.copy(); self.t=t
         if np.linalg.norm(p-self.p)<.05 and angle<.2:self.recovering=False
         # Bound prediction by 3cm even after a noisy reacquisition.
-        pred=self.velocity*self.prediction
+        pred=np.zeros(3) if self.recovering else self.velocity*self.prediction
         pred*=min(1.,0.03/max(np.linalg.norm(pred),1e-9))
         return self.p+pred,self.q.copy()

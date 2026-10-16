@@ -24,6 +24,7 @@ class Estimate:
 class Solver:
     def __init__(self,palm_width_m=.085,bone_lengths_m=None,distortion=None,max_evaluations=22,warm_max_evaluations=8):
         self.model=Model(palm_width_m,bone_lengths_m); self.distortion=distortion
+        self.palm_templates={s:self.model.local(np.zeros((5,4)),s)[[0,5,9,13,17]] for s in (1,2)}
         self.previous={}; self.max_eval=max_evaluations;self.warm_max_eval=warm_max_evaluations
         # Splay +/-35deg, MCP up to95, PIP110, DIP85. Thumb uses same conservative bounds.
         self.low=np.r_[[-3,-3,.08],[-2*np.pi]*3,np.tile([-.61,-.15,0,0],5)]
@@ -64,7 +65,7 @@ class Solver:
         # Rigid palm anchors cannot move when fingers bend. Fit the six rigid
         # parameters from these alone, then fit articulation with pose fixed.
         anchors=np.array([0,5,9,13,17])
-        palm_local=self.model.local(np.zeros((5,4)),side)[anchors]
+        palm_local=self.palm_templates[side]
         def palm_batch(v):
             v=np.atleast_2d(v);rot=Rotation.from_rotvec(v[:,3:])
             pts=np.einsum('nij,kj->nki',rot.as_matrix(),palm_local)+v[:,None,:3]

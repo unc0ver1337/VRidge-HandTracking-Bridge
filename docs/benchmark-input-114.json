@@ -1,0 +1,6 @@
+{
+  "scope": "input packet serialization only; not VR latency",
+  "before_us": 159.44459999991523,
+  "after_us": 65.2772500015999,
+  "speedup": 2.442575322888255
+}

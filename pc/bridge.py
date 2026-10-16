@@ -68,11 +68,14 @@ def main():
                 f,capture_pc,received=item; current={}
                 if f.session!=active_session:
                     active_session=f.session;solver.previous.clear();identity=Identity();latest_orientation.clear()
+                    filters={s:PoseFilter(**cfg['filter']) for s in (1,2)};glass.fingers.clear()
                 if cfg.get('camera_intrinsics') is not None: f.intrinsics=np.asarray(cfg['camera_intrinsics'],float)
                 for side,hand in identity.update(f.hands,f.capture).items():
                     current[side]=(side,hand,f)
                     try:
+                        if time.monotonic()-capture_pc>.2:raise ValueError('frame already stale before solve')
                         pose=solver.solve(hand,f,side)
+                        if time.monotonic()-capture_pc>.2:raise ValueError('solve exceeded pose freshness budget')
                         if centering:space.center_orientation(pose.quaternion,side)
                         # Transform using head pose at CAPTURE, filter in WORLD coordinates.
                         p,q=space.transform(pose.position,pose.quaternion,capture_pc,side)
@@ -81,7 +84,7 @@ def main():
                         # Drop results that spent too long optimizing; never render a
                         # stale cold-start result or overwrite fresh XInput state.
                         if time.monotonic()-capture_pc>.2:raise ValueError('solve exceeded pose freshness budget')
-                        glass.send(side,p,q,{},pose.angles,include_input=False); inputs.tracked(side,time.monotonic())
+                        glass.send(side,p,q,{},pose.angles,include_input=False,sample_time=capture_pc); inputs.tracked(side,time.monotonic())
                         latest_orientation[side]=(pose.quaternion.copy(),time.monotonic())
                         solved_ms.append(pose.solve_ms)
                         quality[side]={'palm_reprojection_px':round(pose.palm_rmse,2),'valid_fingers':int(np.count_nonzero(pose.finger_valid)),'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
