@@ -9,14 +9,17 @@ class PoseFilter:
         self.pc=position_hz; self.pb=position_beta; self.rc=rotation_hz; self.rb=rotation_beta
         self.prediction=min(max(prediction_ms/1000,0),0.03); self.t=None; self.velocity=np.zeros(3);self.recovering=False
     def update(self,p,q,t):
-        p=np.asarray(p,dtype=float); q=np.asarray(q,dtype=float)/np.linalg.norm(q)
+        p=np.asarray(p,dtype=float); q=np.asarray(q,dtype=float)
+        if p.shape!=(3,) or q.shape!=(4,) or not np.isfinite(np.r_[p,q,t]).all() or np.linalg.norm(q)<1e-8:
+            raise ValueError('invalid filter pose')
+        q=q/np.linalg.norm(q)
         if self.t is None:
             self.p=p.copy(); self.raw=p.copy(); self.q=q.copy(); self.t=t; self.velocity=np.zeros(3)
             return self.p.copy(), self.q.copy()
         dt=t-self.t
         if dt<=0: return self.p.copy(),self.q.copy()
         if dt>.35:
-            self.raw=p.copy();self.velocity=np.zeros(3);self.recovering=True;dt=1/60
+            self.raw=p.copy();self.velocity=np.zeros(3);self.recovering=True;dt=1/30
         dt=min(dt,1/15) # reacquisition must not teleport after a long loss
         velocity=(p-self.raw)/dt
         self.velocity+=alpha(1.,dt)*(velocity-self.velocity)

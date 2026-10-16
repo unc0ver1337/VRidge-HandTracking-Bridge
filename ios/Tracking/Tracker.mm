@@ -59,7 +59,7 @@
     if(![s canAddInput:input]){[s commitConfiguration];[self emit:@"Camera busy; VRidge preserved"];return;}
     [s addInput:input];
     AVCaptureDeviceFormat *best=nil; double score=DBL_MAX; double bestFPS=30;
-    double desired=[_settings[@"FPS"] intValue]==30?30:60;
+    double desired=30; // Stable 30 FPS capture and Vision budget.
     for(AVCaptureDeviceFormat *format in _camera.formats){
         CMVideoDimensions d=CMVideoFormatDescriptionGetDimensions(format.formatDescription);
         double maxFPS=0; for(AVFrameRateRange *r in format.videoSupportedFrameRateRanges)maxFPS=MAX(maxFPS,r.maxFrameRate);
