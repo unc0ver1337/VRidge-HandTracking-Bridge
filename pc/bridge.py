@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 from .network import Server
+from .configuration import load_config
 from .tracking.identity import Identity
 from .tracking.filter import PoseFilter
 from .reconstruction.solver import Solver
@@ -17,7 +18,7 @@ from .glassvr.visibility import DevicePresence
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument('--config',default='pc/config.yaml'); parser.add_argument('--log',default='bridge.log');parser.add_argument('--duration',type=float,default=0,help='Optional diagnostic runtime in seconds'); args=parser.parse_args()
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(name)s %(message)s',handlers=[logging.StreamHandler(),RotatingFileHandler(args.log,maxBytes=8*1024*1024,backupCount=3,encoding='utf8')])
-    log=logging.getLogger('bridge'); cfg=yaml.safe_load(Path(args.config).read_text())
+    log=logging.getLogger('bridge'); cfg=load_config(args.config)
     driver_settings=Path(os.environ.get('APPDATA',''))/'glassvr/settings.json'
     if driver_settings.exists():
         installed=json.loads(driver_settings.read_text(encoding='utf8'))
