@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install numpy opencv-python-headless coremltools
+      - run: python -m pip install numpy==2.4.6 opencv-python-headless==4.13.0.92 coremltools==9.0
       - name: Test production translation math on synthetic poses
         run: clang++ -std=c++17 -O2 tests/native_translation.cpp -o /tmp/test-translation && /tmp/test-translation
       - name: Build ARM64 dynamic library
