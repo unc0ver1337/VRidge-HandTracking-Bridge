@@ -16,3 +16,7 @@ hardware.local.yaml
 orientation.local.yaml
 *.spec
 dist/
+
+ios/deps/
+ios/assets/
+*.xcframework/

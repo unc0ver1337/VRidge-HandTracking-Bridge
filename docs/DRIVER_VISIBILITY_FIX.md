@@ -1,1 +1,7 @@
-# GlassVR stable controller connection\n\nThe driver keeps deviceIsConnected tied to persistent enable cl/cr settings and uses separate tracking cl/cr flags for poseIsValid. The bridge leaves both devices enabled and updates tracking validity as each hand appears or disappears. This avoids repeated TrackedDeviceAdded calls on reacquisition, which could leave duplicate or stale controller instances.\n\nThe patched DLL comes from the source changes in patches/glassvr-stable-controller-connection.patch and patches/glassvr-initialize-aux-bones.patch. Viture headers are absent from the available source tree, so prebuilt upstream objects and libraries are reused.\n\nInstall the DLL while SteamVR is closed, then restart SteamVR once. During tracking use, bridge and SteamVR stay running.\n
+# GlassVR stable controller connection
+
+The driver keeps deviceIsConnected tied to persistent enable cl/cr settings and uses separate tracking cl/cr flags for poseIsValid. The bridge leaves both devices enabled and updates tracking validity as each hand appears or disappears. This avoids repeated TrackedDeviceAdded calls on reacquisition, which could leave duplicate or stale controller instances.
+
+The patched DLL comes from the source changes in patches/glassvr-stable-controller-connection.patch and patches/glassvr-initialize-aux-bones.patch. Viture headers are absent from the available source tree, so prebuilt upstream objects and libraries are reused.
+
+Install the DLL while SteamVR is closed, then restart SteamVR once. During tracking use, bridge and SteamVR stay running.

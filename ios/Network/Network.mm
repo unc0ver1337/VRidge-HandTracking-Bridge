@@ -29,7 +29,7 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
 - (void)start {
     if(_running)return; _running=YES;
     _browser=[NSNetServiceBrowser new]; _browser.delegate=self;
-    [_browser searchForServicesOfType:@"_vhbridge._udp." inDomain:@"local."];
+    [_browser searchForServicesOfType:@"_mpbridge._udp." inDomain:@"local."];
     dispatch_async(_queue,^{
         self->_fd=socket(AF_INET,SOCK_DGRAM,0);
         if(self->_fd<0){[self emit:@"Network socket unavailable"];return;}
@@ -63,7 +63,7 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
     NSDictionary *txt=[NSNetService dictionaryFromTXTRecordData:service.TXTRecordData?:[NSData data]];
     NSString *proto=[[NSString alloc]initWithData:txt[@"protocol"] encoding:NSUTF8StringEncoding];
     NSString *version=[[NSString alloc]initWithData:txt[@"version"] encoding:NSUTF8StringEncoding];
-    if(![proto isEqual:@"VHBR"]||![version isEqual:@"1"])return;
+    if(![proto isEqual:@"MPBR"]||![version isEqual:@"2"])return;
     for(NSData *address in service.addresses){
         if(address.length>=sizeof(sockaddr_in)&&((const sockaddr *)address.bytes)->sa_family==AF_INET){
             dispatch_async(_queue,^{
@@ -74,7 +74,7 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
 }
 - (void)json:(NSDictionary *)object {
     if(!_address||_fd<0)return;
-    NSMutableDictionary *o=[object mutableCopy]; o[@"protocol"]=@"VHBR"; o[@"v"]=@1;
+    NSMutableDictionary *o=[object mutableCopy]; o[@"protocol"]=@"MPBR"; o[@"v"]=@2;
     NSData *data=[NSJSONSerialization dataWithJSONObject:o options:0 error:nil];
     sendto(_fd,data.bytes,data.length,0,(const sockaddr *)_address.bytes,(socklen_t)_address.length);
 }
@@ -87,7 +87,7 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
         const sockaddr_in *expected=(const sockaddr_in *)_address.bytes;
         if(from.sin_addr.s_addr!=expected->sin_addr.s_addr||from.sin_port!=expected->sin_port)continue;
         id o=[NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:buf length:(NSUInteger)size] options:0 error:nil];
-        if(![o isKindOfClass:NSDictionary.class]||![o[@"protocol"] isEqual:@"VHBR"]||[o[@"v"] intValue]!=1)continue;
+        if(![o isKindOfClass:NSDictionary.class]||![o[@"protocol"] isEqual:@"MPBR"]||[o[@"v"] intValue]!=2)continue;
         if([o[@"type"] isEqual:@"welcome"]&&[o[@"nonce"] isEqual:_nonce]&&[o[@"session"] isKindOfClass:NSNumber.class]){
             _session=[o[@"session"] unsignedLongLongValue]; _lastReply=now;
             if(!_connected){[self emit:@"Connected to PC"]; [self setConnected:YES];}

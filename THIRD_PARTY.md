@@ -17,13 +17,23 @@ its distribution terms and contact its author for reuse permissions.
 
 **VRidge 2 / RiftCat** is proprietary third-party software. The unsigned modified
 IPA supplied in the release is based on the decrypted VRidge 2.7.8 IPA provided
-by the project owner, who explicitly requested its public distribution. The
-original app is not authored or relicensed by this project. The added dynamic
-library is our code; original executable code and resources remain VRidge's.
+by the project owner. The owner explicitly requested distribution of the IPA in the main project
+release. The experimental client was tested by the owner before promotion to 2.0. The original app is not authored or relicensed by
+this project. Its executable is preserved by the update process.
+
+**MediaPipe by Google / Google AI Edge** supplies the on-device Hand Landmarker,
+SDK 1.1.1 and hand_landmarker float16/v1 model. Source:
+https://github.com/google-ai-edge/mediapipe . SDK source is Apache License 2.0;
+the full license is in third_party/MediaPipe-LICENSE.txt. Model download/source:
+https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker#models .
+SDK and model hashes are pinned in ios/fetch_dependencies.py. Third-party code
+and model assets retain their own distribution terms; our MIT license covers
+our added code, not the model or proprietary VRidge.
 
 Windows EXE bundles Python, NumPy, SciPy, PyYAML, zeroconf, OpenVR Python bindings
-and PyInstaller runtime components. Dependency license/notices collected by
-PyInstaller are preserved in the `_internal` distribution directory. Apple
-Vision/AVFoundation are system frameworks on iOS, not redistributed frameworks.
+and PyInstaller runtime components. Collected dependency notices are preserved
+in _internal. AVFoundation/OpenGLES and other Apple frameworks are system
+frameworks, not redistributed binaries. MediaPipe SDK is statically linked in
+the injected library; the .task model is included in the IPA.
 
 No affiliation with Valve, Apple, RiftCat, or DaniXmir is claimed.

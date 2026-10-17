@@ -16,8 +16,6 @@ behavior depends on the game's SteamVR binding for Index B. Trackpads are unused
 Disconnect releases both hands. InputManager still suppresses input for a hand
 without a recent tracked pose.
 
-Controller forward -Z now maps to the kinematic hand's wrist-to-fingers +Y axis
-through a fixed Rx(90 degrees) basis conversion, rather than the palm normal.
-Position and HMD attachment remain unchanged. No yaw inversion or experimental
-calibration is enabled. Monocular ambiguity remains; real hardware verification
-of orientation and buttons is pending. All 43 automated tests passed locally.
+Controller forward -Z maps to the MediaPipe palm basis wrist-to-fingers +Y.
+Hold Back+Start to center the controller rays toward HMD forward; the correction
+lasts for this session only. See README for the current 2.0 installation steps.

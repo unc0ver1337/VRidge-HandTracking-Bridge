@@ -1,18 +1,19 @@
 #import "Tracker.h"
 #import "../Network/Wire.h"
 #import <AVFoundation/AVFoundation.h>
-#import <Vision/Vision.h>
+#import <MediaPipeTasksVision/MediaPipeTasksVision.h>
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
 #import <simd/simd.h>
+#include "TranslationFit.h"
 #include <atomic>
 
 @interface VHTracker () <AVCaptureVideoDataOutputSampleBufferDelegate>
 @end
 @implementation VHTracker {
     AVCaptureSession *_session; AVCaptureDevice *_camera;
-    dispatch_queue_t _captureQueue; dispatch_queue_t _visionQueue;
-    VNDetectHumanHandPoseRequest *_request; CIContext *_context;
+    dispatch_queue_t _captureQueue; dispatch_queue_t _inferenceQueue;
+    MPPHandLandmarker *_request; NSInteger _lastTimestamp; CIContext *_context;
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence; double _meanMS; unsigned _samples;
     CVPixelBufferPoolRef _pool; int _width,_height;
@@ -21,10 +22,17 @@
 }
 - (instancetype)initWithSettings:(NSDictionary *)settings {
     if((self=[super init])){
-        _settings=settings; _captureQueue=dispatch_queue_create("vh.capture",DISPATCH_QUEUE_SERIAL); _visionQueue=dispatch_queue_create("vh.vision",DISPATCH_QUEUE_SERIAL);
-        _busy=false; _wanted=false; _pool=nullptr; _width=[settings[@"Width"] intValue]?:640; _height=[settings[@"Height"] intValue]?:480;
-        _width=MAX(64,MIN(1280,_width));_height=MAX(64,MIN(960,_height));
-        _request=[VNDetectHumanHandPoseRequest new]; _request.maximumHandCount=2;
+        _settings=settings; _captureQueue=dispatch_queue_create("vh.capture",DISPATCH_QUEUE_SERIAL); _inferenceQueue=dispatch_queue_create("vh.mediapipe",DISPATCH_QUEUE_SERIAL);
+        _busy=false; _wanted=false; _pool=nullptr; _width=640; _height=480;
+        dispatch_async(_inferenceQueue,^{
+        NSError *modelError=nil;
+        MPPHandLandmarkerOptions *options=[MPPHandLandmarkerOptions new];
+        options.baseOptions.modelAssetPath=[[NSBundle mainBundle] pathForResource:@"hand_landmarker" ofType:@"task"];
+        options.runningMode=MPPRunningModeVideo;options.numHands=2;
+        options.minHandDetectionConfidence=.5;options.minHandPresenceConfidence=.5;options.minTrackingConfidence=.5;
+        self->_request=[[MPPHandLandmarker alloc] initWithOptions:options error:&modelError];
+        if(!self->_request)NSLog(@"MediaPipe model unavailable: %@",modelError);
+        });
         _context=[CIContext contextWithOptions:@{kCIContextCacheIntermediates:@NO}];
         _hostSessions=[NSHashTable weakObjectsHashTable];
         _ownedSessions=[NSHashTable weakObjectsHashTable];
@@ -59,7 +67,7 @@
     if(![s canAddInput:input]){[s commitConfiguration];[self emit:@"Camera busy; VRidge preserved"];return;}
     [s addInput:input];
     AVCaptureDeviceFormat *best=nil; double score=DBL_MAX; double bestFPS=30;
-    double desired=30; // Stable 30 FPS capture and Vision budget.
+    double desired=30; // Stable 30 FPS capture and MediaPipe budget.
     for(AVCaptureDeviceFormat *format in _camera.formats){
         CMVideoDimensions d=CMVideoFormatDescriptionGetDimensions(format.formatDescription);
         double maxFPS=0; for(AVFrameRateRange *r in format.videoSupportedFrameRateRanges)maxFPS=MAX(maxFPS,r.maxFrameRate);
@@ -75,7 +83,7 @@
     [out setSampleBufferDelegate:self queue:_captureQueue];
     if(![s canAddOutput:out]){[s commitConfiguration];[self emit:@"Capture output unavailable"];return;}
     [s addOutput:out]; AVCaptureConnection *connection=[out connectionWithMediaType:AVMediaTypeVideo];
-    // Keep native sensor orientation regardless of interface rotation. Vision Up and
+    // Keep native sensor orientation regardless of interface rotation. MediaPipe image orientation and
     // packet coordinates refer to that SAME image; UI autorotation cannot move hands.
     if(@available(iOS 17.0,*)){
         if([connection isVideoRotationAngleSupported:0])connection.videoRotationAngle=0;
@@ -98,7 +106,7 @@
     // Only this tweak's own session. Existing host capture sessions are observed,
     // never stopped, swizzled, or reconfigured.
     [_session stopRunning]; _session=nil; _camera=nil;
-    dispatch_sync(_visionQueue,^{});
+    dispatch_sync(_inferenceQueue,^{});
     if(_pool){CVPixelBufferPoolRelease(_pool);_pool=nullptr;}
 }
 - (void)hostStarted:(NSNotification *)n {
@@ -145,7 +153,7 @@
         image=[image imageByApplyingTransform:CGAffineTransformMake(scale,0,0,scale,ox,oy)];
         [_context render:image toCVPixelBuffer:scaled bounds:CGRectMake(0,0,_width,_height) colorSpace:nil];
     }
-    VHHeader header={}; memcpy(header.magic,"VHBR",4);header.version=1;header.sequence=_sequence++; header.width=_width;header.height=_height;
+    VHHeader header={}; memcpy(header.magic,"MPBR",4);header.version=2;header.sequence=_sequence++; header.width=_width;header.height=_height;
     // Convert sample time from capture session clock into host clock used by sync.
     CMTime pts=CMSampleBufferGetPresentationTimeStamp(sample);
     CMClockRef clock=_session.masterClock;
@@ -159,41 +167,56 @@
         header.flags=1;float f=(float)(sw/(2*tan(_camera.activeFormat.videoFieldOfView*M_PI/360)));
         header.fx=header.fy=f*scale;header.cx=_width*.5;header.cy=_height*.5;
     }
-    dispatch_async(_visionQueue,^{ @autoreleasepool {
+    dispatch_async(_inferenceQueue,^{ @autoreleasepool {
         double begin=CFAbsoluteTimeGetCurrent(); NSError *error=nil;
-        VNImageRequestHandler *handler=[[VNImageRequestHandler alloc]initWithCVPixelBuffer:scaled orientation:kCGImagePropertyOrientationUp options:@{}];
-        BOOL ok=[handler performRequests:@[self->_request] error:&error]; CVPixelBufferRelease(scaled);
-        if(ok){
-            VHHeader h=header; NSMutableData *body=[NSMutableData data]; unsigned observationIndex=0;
-            NSArray *names=@[VNHumanHandPoseObservationJointNameWrist,
-                VNHumanHandPoseObservationJointNameThumbCMC,VNHumanHandPoseObservationJointNameThumbMP,VNHumanHandPoseObservationJointNameThumbIP,VNHumanHandPoseObservationJointNameThumbTip,
-                VNHumanHandPoseObservationJointNameIndexMCP,VNHumanHandPoseObservationJointNameIndexPIP,VNHumanHandPoseObservationJointNameIndexDIP,VNHumanHandPoseObservationJointNameIndexTip,
-                VNHumanHandPoseObservationJointNameMiddleMCP,VNHumanHandPoseObservationJointNameMiddlePIP,VNHumanHandPoseObservationJointNameMiddleDIP,VNHumanHandPoseObservationJointNameMiddleTip,
-                VNHumanHandPoseObservationJointNameRingMCP,VNHumanHandPoseObservationJointNameRingPIP,VNHumanHandPoseObservationJointNameRingDIP,VNHumanHandPoseObservationJointNameRingTip,
-                VNHumanHandPoseObservationJointNameLittleMCP,VNHumanHandPoseObservationJointNameLittlePIP,VNHumanHandPoseObservationJointNameLittleDIP,VNHumanHandPoseObservationJointNameLittleTip];
-            for(VNHumanHandPoseObservation *obs in self->_request.results){
-                if(h.count>=2)break; VHHand hand={};
-                if(@available(iOS 15.0,*)){hand.side=obs.chirality==VNChiralityLeft?1:obs.chirality==VNChiralityRight?2:0;}
-                NSDictionary *points=[obs recognizedPointsForGroupKey:VNHumanHandPoseObservationJointsGroupNameAll error:nil];
-                for(unsigned j=0;j<21;j++){
-                    VNRecognizedPoint *p=points[names[j]];
-                    if(p){hand.landmarks[j][0]=fmax(0,fmin(1,p.location.x));hand.landmarks[j][1]=fmax(0,fmin(1,1-p.location.y));hand.landmarks[j][2]=p.confidence;}
+        MPPImage *image=[[MPPImage alloc] initWithPixelBuffer:scaled error:&error];
+        CVPixelBufferRelease(scaled);
+        NSInteger stamp=MAX(self->_lastTimestamp+1,(NSInteger)(header.capture*1000));self->_lastTimestamp=stamp;
+        MPPHandLandmarkerResult *result=image?[self->_request detectVideoFrame:image timestampInMilliseconds:stamp error:&error]:nil;
+        if(result){
+            VHHeader h=header;NSMutableData *body=[NSMutableData data];
+            for(NSUInteger i=0;i<MIN((NSUInteger)2,result.landmarks.count);i++){
+                if(i>=result.worldLandmarks.count||result.landmarks[i].count!=21||result.worldLandmarks[i].count!=21)continue;
+                VHHand hand={};
+                MPPCategory *category=(i<result.handedness.count)?result.handedness[i].firstObject:nil;
+                hand.side=[category.categoryName isEqualToString:@"Left"]?1:[category.categoryName isEqualToString:@"Right"]?2:0;
+                hand.identity=(uint32_t)(i+1);
+                bool finite=true;
+                for(NSUInteger j=0;j<21;j++){
+                    MPPNormalizedLandmark *p=result.landmarks[i][j];MPPLandmark *w=result.worldLandmarks[i][j];
+                    finite=finite&&isfinite(p.x)&&isfinite(p.y)&&isfinite(w.x)&&isfinite(w.y)&&isfinite(w.z);
+                    hand.landmarks[j][0]=fmax(0,fmin(1,p.x));hand.landmarks[j][1]=fmax(0,fmin(1,p.y));
+                    hand.landmarks[j][2]=1; // Availability, NOT a measured per-joint confidence.
+                    hand.world[j][0]=w.x;hand.world[j][1]=w.y;hand.world[j][2]=w.z;
                 }
-                // Chirality is semantic evidence. Persistent spatial identity is resolved
-                // by the PC with velocity association; no left/right guess from screen X.
-                hand.identity=hand.side?:10+observationIndex; observationIndex++;
-                // Chirality + palm triangle winding gives a WEAK front/back cue.
-                // Suppress edge-on/low-confidence cases. PC never treats it as exact.
-                float ax=hand.landmarks[5][0]-hand.landmarks[0][0],ay=hand.landmarks[5][1]-hand.landmarks[0][1];
-                float bx=hand.landmarks[17][0]-hand.landmarks[0][0],by=hand.landmarks[17][1]-hand.landmarks[0][1];
-                float area=ax*by-ay*bx,den=hypotf(ax,ay)*hypotf(bx,by);
-                if(hand.side&&den>1e-6&&fabsf(area)/den>.2&&MIN(hand.landmarks[5][2],MIN(hand.landmarks[17][2],hand.landmarks[0][2]))>.5){
-                    float winding=area*(hand.side==1?-1:1);hand.palm=winding>0?1:-1;
+                if(!finite)continue;
+                // MediaPipe world points already carry camera-relative orientation.
+                // Solve translation from 2D rays and metric model points on the phone.
+                mpbridge::Fit fit;
+                hand.rotation[3]=1;
+                bool translationValid=mpbridge::translationFit(hand.world,hand.landmarks,h.width,h.height,h.fx,h.fy,h.cx,h.cy,fit);
+                hand.reprojection=fit.error;
+                if(translationValid){
+                    vector_float3 translation={fit.translation[0],fit.translation[1],fit.translation[2]};
+                    vector_float3 wrist={hand.world[0][0],hand.world[0][1],hand.world[0][2]};
+                    vector_float3 index={hand.world[5][0],hand.world[5][1],hand.world[5][2]};
+                    vector_float3 little={hand.world[17][0],hand.world[17][1],hand.world[17][2]};
+                    vector_float3 middle={hand.world[9][0],hand.world[9][1],hand.world[9][2]};
+                    vector_float3 x=(index-little)*(hand.side==1?-1.f:1.f);vector_float3 y=middle-wrist;
+                    bool valid=simd_length(x)>.005&&simd_length(y)>.005;
+                    if(valid){x=simd_normalize(x);y-=x*simd_dot(x,y);valid=simd_length(y)>.005;}
+                    vector_float3 position=wrist+translation;
+                    if(valid){
+                        y=simd_normalize(y);vector_float3 z=simd_cross(x,y);matrix_float3x3 basis={x,y,z};
+                        simd_quatf q=simd_quaternion(basis);
+                        for(int c=0;c<3;c++)hand.position[c]=position[c];
+                        for(int c=0;c<4;c++)hand.rotation[c]=q.vector[c];hand.poseValid=1;
+                    }
                 }
                 [body appendBytes:&hand length:sizeof(hand)];h.count++;
             }
-            NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];[data appendData:body]; if(self.frame)self.frame(data);
-        }else NSLog(@"VH Vision error: %@",error);
+            NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];[data appendData:body];if(self.frame)self.frame(data);
+        }else NSLog(@"MediaPipe frame error: %@",error);
         double ms=(CFAbsoluteTimeGetCurrent()-begin)*1000; self->_meanMS=self->_samples?self->_meanMS*.9+ms*.1:ms;
         self->_samples++;
         if(self->_samples==120&&self->_meanMS>25){

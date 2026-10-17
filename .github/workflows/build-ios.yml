@@ -1,4 +1,4 @@
-name: Build and test
+name: VRidge 2.0 MediaPipe build and test
 on:
   push:
   pull_request:
@@ -32,6 +32,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Test production translation math on synthetic poses
+        run: clang++ -std=c++17 -O2 tests/native_translation.cpp -o /tmp/test-translation && /tmp/test-translation
       - name: Build ARM64 dynamic library
         run: bash ios/build.sh
       - name: Verify ARM64 load commands

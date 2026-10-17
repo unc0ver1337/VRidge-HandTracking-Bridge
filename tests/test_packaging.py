@@ -23,7 +23,8 @@ def test_inject_refuses_encryption_and_occupied_slack():
 
 def test_complete_private_packaging_metadata_and_preservation(tmp_path):
     source=tmp_path/'source.ipa';dylib=tmp_path/'tracker.dylib';settings=tmp_path/'settings.plist';out=tmp_path/'out.ipa'
-    dylib.write_bytes(b'SYNTHETIC_TEST_LIBRARY');settings.write_bytes(plistlib.dumps({'FPS':60}))
+    dylib.write_bytes(b'SYNTHETIC_TEST_LIBRARY');settings.write_bytes(plistlib.dumps({'FPS':30}))
+    (tmp_path/'hand_landmarker.task').write_bytes(b'SYNTHETIC_MODEL')
     info={'CFBundleExecutable':'Original','CFBundleIdentifier':'example.original','MinimumOSVersion':'11.0','NSBonjourServices':['_original._udp']}
     with zipfile.ZipFile(source,'w') as z:
         z.writestr('Payload/Original.app/Info.plist',plistlib.dumps(info));z.writestr('Payload/Original.app/Original',macho());z.writestr('Payload/Original.app/resource.bin',b'KEEP_ORIGINAL_RESOURCE')
@@ -31,14 +32,16 @@ def test_complete_private_packaging_metadata_and_preservation(tmp_path):
     assert source.read_bytes()==original
     with zipfile.ZipFile(out) as z:
         pl=plistlib.loads(z.read('Payload/Original.app/Info.plist'))
-        assert pl['CFBundleIdentifier']=='example.original' and pl['MinimumOSVersion']=='15.0'
-        assert pl['NSBonjourServices']==['_original._udp','_vhbridge._udp']
+        assert pl['CFBundleIdentifier']=='com.riftcat.vridge2' and pl['MinimumOSVersion']=='15.0'
+        assert pl['NSBonjourServices']==['_mpbridge._udp','_original._udp']
+        assert z.read('Payload/Original.app/hand_landmarker.task')==b'SYNTHETIC_MODEL'
         assert z.read('Payload/Original.app/Original')[4096:]==macho()[4096:]
         assert z.read('Payload/Original.app/resource.bin')==b'KEEP_ORIGINAL_RESOURCE'
 
 def test_update_injected_ipa_preserves_executable(tmp_path):
     from scripts.update_injected_ipa import update
     original=tmp_path/'in.ipa';output=tmp_path/'out.ipa';dll=tmp_path/'new.dylib';settings=tmp_path/'settings.plist'
+    (tmp_path/'hand_landmarker.task').write_bytes(b'MODEL')
     binary=inject(macho());dll.write_bytes(b'NEW_DYLIB');settings.write_bytes(plistlib.dumps({'FPS':30}))
     root='Payload/App.app/'
     with zipfile.ZipFile(original,'w') as z:
@@ -50,4 +53,6 @@ def test_update_injected_ipa_preserves_executable(tmp_path):
         assert z.read(root+'App')==binary
         assert z.read(root+'Frameworks/VRidgeHandTracking.dylib')==b'NEW_DYLIB'
         assert plistlib.loads(z.read(root+'VHBridge.plist'))['FPS']==30
+        assert plistlib.loads(z.read(root+'Info.plist'))['CFBundleIdentifier']=='com.riftcat.vridge2'
+        assert z.read(root+'hand_landmarker.task')==b'MODEL'
         assert root+'_CodeSignature/CodeResources' not in z.namelist()

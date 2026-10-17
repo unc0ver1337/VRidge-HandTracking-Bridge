@@ -3,10 +3,12 @@ from pc.protocol import *
 from pc.network import Server
 
 def fixture_frame():
-    return Frame(1,5,100.,640,480,np.array([400,400,320,240]),[Hand(1,1,0,np.full((21,3),.5)),Hand(2,2,0,np.full((21,3),.6))])
+    def make(side,value):
+        return Hand(side,side,0,np.full((21,3),value),np.zeros((21,3)),np.array([0,0,.5]),np.array([0,0,0,1]),1.,True)
+    return Frame(1,5,100.,640,480,np.array([400,400,320,240]),[make(1,.5),make(2,.6)])
 
 def test_roundtrip_and_mtu():
-    f=fixture_frame(); raw=encode(f); assert len(raw)==568
+    f=fixture_frame(); raw=encode(f); assert len(raw)==1144
     g=decode(raw); assert g.seq==f.seq and g.session==5
     np.testing.assert_allclose(g.hands[1].points,f.hands[1].points)
 
@@ -37,7 +39,7 @@ def test_network_session_age_and_latest_only():
 
 def test_handshake_and_clock_without_hardware():
     s=Server(); sent=[];s.send=lambda o,a:sent.append(o)
-    addr=('10.0.0.2',1234);base={'protocol':'VHBR','v':1}
+    addr=('10.0.0.2',1234);base={'protocol':'MPBR','v':2}
     s.control(base|{'type':'hello','nonce':'a'*32,'device':'test'},addr,100)
     assert sent[-1]['nonce']=='a'*32
     session=s.session;s.control(base|{'type':'sync','session':session,'t0':90.,'t3':90.02,'s1':100.009,'s2':100.011},addr,100.021)
@@ -47,7 +49,7 @@ def test_handshake_and_clock_without_hardware():
 
 def test_clock_refresh_window_prevents_permanent_old_offset():
     s=Server();s.peer=('10.0.0.2',5);s.session=7;addr=s.peer
-    base={'protocol':'VHBR','v':1,'type':'sync','session':7}
+    base={'protocol':'MPBR','v':2,'type':'sync','session':7}
     s.control(base|{'t0':90.,'t3':90.01,'s1':100.004,'s2':100.006},addr,100.01)
     assert abs(s.offset-10)<1e-8
     s.control(base|{'t0':151.,'t3':151.02,'s1':161.011,'s2':161.013},addr,161.03)

@@ -1,7 +1,7 @@
 """Update our dylib/settings in an already injected, unsigned IPA."""
 import argparse,plistlib,zipfile,struct,os
 from pathlib import Path
-from scripts.package_ipa import LOAD_PATH
+from scripts.package_ipa import LOAD_PATH,mediapipe_info
 
 def update(ipa,dylib,settings,output):
     output=Path(output);temp=output.with_suffix('.ipa.tmp')
@@ -22,12 +22,17 @@ def update(ipa,dylib,settings,output):
             off+=length
         if loads.count(LOAD_PATH.encode())!=1:raise ValueError('our dylib must already be injected exactly once')
         replacements={root+'/Frameworks/VRidgeHandTracking.dylib':Path(dylib).read_bytes(),root+'/VHBridge.plist':Path(settings).read_bytes()}
-        if not set(replacements).issubset(names):raise ValueError('missing injected files')
+        replacements[root+'/hand_landmarker.task']=(Path(dylib).parent/'hand_landmarker.task').read_bytes()
+        mediapipe_info(info)
+        replacements[plists[0]]=plistlib.dumps(info)
+        if root+'/Frameworks/VRidgeHandTracking.dylib' not in names:raise ValueError('missing injected dylib')
         try:
             with zipfile.ZipFile(temp,'w',zipfile.ZIP_DEFLATED) as dest:
                 for entry in source.infolist():
                     if '/_CodeSignature/' in entry.filename or entry.filename.endswith('/embedded.mobileprovision'):continue
                     dest.writestr(entry,replacements.get(entry.filename,source.read(entry.filename)))
+                for name,data in replacements.items():
+                    if name not in names:dest.writestr(name,data)
             with zipfile.ZipFile(temp) as result:
                 if result.testzip() is not None:raise ValueError('corrupt output')
                 if result.read(root+'/'+info['CFBundleExecutable'])!=binary:raise ValueError('executable changed')

@@ -4,11 +4,11 @@ from .protocol import decode,Sequence,VERSION
 from .interfaces import local_ipv4
 
 LOG=logging.getLogger(__name__)
-SERVICE='_vhbridge._udp.local.'
+SERVICE='_mpbridge._udp.local.'
 
 class Server:
     """Dedicated bounded receiver. Last-frame replacement never builds a queue."""
-    def __init__(self,port=39570,timeout_s=3,bind_ip='0.0.0.0',advertise_ip=None):
+    def __init__(self,port=39580,timeout_s=3,bind_ip='0.0.0.0',advertise_ip=None):
         self.port=port; self.timeout=timeout_s; self.bind_ip=bind_ip; self.advertise_ip=advertise_ip
         self.stop=threading.Event(); self.lock=threading.Lock(); self.latest=None
         self.peer=None; self.session=0; self.last_seen=0; self.seq=Sequence(); self.offset=None; self.rtt=float('inf')
@@ -36,7 +36,7 @@ class Server:
                 # Separate names/host records prevent an iPhone on the hotspot
                 # from receiving the unrelated Ethernet/VPN address first.
                 suffix=ip.replace('.','-')
-                service=ServiceInfo(SERVICE,'GlassVR iPhone Bridge '+suffix+'.'+SERVICE,addresses=[socket.inet_aton(ip)],port=self.port,properties={'protocol':'VHBR','version':str(VERSION),'instance':str(uuid.uuid4())},server='vhbridge-'+suffix+'.local.')
+                service=ServiceInfo(SERVICE,'GlassVR iPhone Bridge '+suffix+'.'+SERVICE,addresses=[socket.inet_aton(ip)],port=self.port,properties={'protocol':'MPBR','version':str(VERSION),'instance':str(uuid.uuid4())},server='mpbridge-'+suffix+'.local.')
                 zc.register_service(service);self.announcements[ip]=(zc,service)
                 LOG.info('Bonjour enabled on %s:%d',ip,self.port)
             except Exception as error:
@@ -49,7 +49,7 @@ class Server:
             self.stop.wait(5)
     def send(self,obj,addr): self.sock.sendto(json.dumps(obj,separators=(',',':')).encode(),addr)
     def control(self,msg,addr,now):
-        if msg.get('v')!=VERSION or msg.get('protocol')!='VHBR': raise ValueError('control protocol')
+        if msg.get('v')!=VERSION or msg.get('protocol')!='MPBR': raise ValueError('control protocol')
         kind=msg.get('type')
         if kind=='hello':
             nonce=msg.get('nonce','')
@@ -60,11 +60,11 @@ class Server:
                 with self.lock: self.latest=None
                 LOG.info('iPhone %s at %s',str(msg.get('device','unknown'))[:80],addr)
             self.last_seen=now
-            self.send({'protocol':'VHBR','v':VERSION,'type':'welcome','nonce':nonce,'session':self.session},addr)
+            self.send({'protocol':'MPBR','v':VERSION,'type':'welcome','nonce':nonce,'session':self.session},addr)
         elif addr==self.peer and msg.get('session')==self.session:
             if kind=='ping':
                 self.last_seen=now
-                self.send({'protocol':'VHBR','v':VERSION,'type':'pong','session':self.session,'t0':float(msg['t0']),'s1':now,'s2':time.monotonic()},addr)
+                self.send({'protocol':'MPBR','v':VERSION,'type':'pong','session':self.session,'t0':float(msg['t0']),'s1':now,'s2':time.monotonic()},addr)
             elif kind=='sync':
                 t0,t3,s1,s2=[float(msg[k]) for k in ('t0','t3','s1','s2')]
                 import math

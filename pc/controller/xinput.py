@@ -67,8 +67,8 @@ class Mapper:
         if m['select_left'] in pad.buttons: self.side=1
         if m['select_right'] in pad.buttons: self.side=2
         if m['mode'] in down: self.split=not self.split
-        for action in ('calibrate','recenter'):
-            if m[action] in down: events.append(action)
+        for action in ('recenter',):
+            if m.get(action) in down: events.append(action)
         b=out[self.side]
         for action in ('a','b','joy_btn','system'):
             b[action]=m.get(action) in pad.buttons

@@ -8,6 +8,16 @@ from pathlib import Path
 
 LOAD_PATH='@executable_path/Frameworks/VRidgeHandTracking.dylib'
 
+def mediapipe_info(info):
+    info['CFBundleIdentifier']='com.riftcat.vridge2'
+    info['CFBundleDisplayName']='VRidge Hand Tracking'
+    info.pop('CFBundleURLTypes',None)
+    info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands with MediaPipe while VRidge streams VR.'
+    info['NSLocalNetworkUsageDescription']='Find the GlassVR iPhone Bridge and stream hand tracking.'
+    info['NSBonjourServices']=sorted((set(info.get('NSBonjourServices',[]))-{'_vhbridge._udp'})|{'_mpbridge._udp'})
+    if int(str(info.get('MinimumOSVersion','0')).split('.')[0])<15:info['MinimumOSVersion']='15.0'
+    return info
+
 def inject(data):
     b=bytearray(data)
     if len(b)<32 or struct.unpack_from('<I',b)[0]!=0xfeedfacf: raise ValueError('requires thin 64-bit little-endian Mach-O')
@@ -56,12 +66,8 @@ def package(ipa,dylib,output,settings,identity=None,profile=None,entitlements=No
         binary.write_bytes(inject(binary.read_bytes())); binary.chmod(0o755)
         frameworks=app/'Frameworks'; frameworks.mkdir(exist_ok=True)
         shutil.copy2(dylib,frameworks/'VRidgeHandTracking.dylib'); shutil.copy2(settings,app/'VHBridge.plist')
-        info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands while VRidge streams VR.'
-        info['NSLocalNetworkUsageDescription']='Find GlassVR iPhone Bridge and stream hand landmarks to your PC.'
-        info['NSBonjourServices']=sorted(set(info.get('NSBonjourServices',[])+['_vhbridge._udp']))
-        # A strongly loaded iOS15 dylib cannot safely preserve iOS11 installability.
-        # Keep the bundle ID, but advertise the actual minimum supported system.
-        if int(str(info.get('MinimumOSVersion','0')).split('.')[0])<15:info['MinimumOSVersion']='15.0'
+        shutil.copy2(Path(dylib).parent/'hand_landmarker.task',app/'hand_landmarker.task')
+        mediapipe_info(info)
         plist.write_bytes(plistlib.dumps(info))
         for signature in app.rglob('_CodeSignature'):
             if signature.is_dir(): shutil.rmtree(signature)
@@ -74,7 +80,7 @@ def package(ipa,dylib,output,settings,identity=None,profile=None,entitlements=No
             p=plistlib.loads(decoded); permitted=p['Entitlements']; appid=permitted['application-identifier']
             expected=appid.split('.',1)[0]+'.'+info['CFBundleIdentifier']
             import fnmatch
-            if not fnmatch.fnmatchcase(expected,appid) or ent.get('application-identifier')!=expected: raise ValueError('profile/entitlements do not match unchanged bundle ID')
+            if not fnmatch.fnmatchcase(expected,appid) or ent.get('application-identifier')!=expected: raise ValueError('profile/entitlements do not match VRidge bundle ID')
             # Nested frameworks and dylibs first, app last. Never --deep-sign blindly.
             nested=sorted([x for x in frameworks.rglob('*') if x.suffix in ('.framework','.dylib')],key=lambda x:len(x.parts),reverse=True)
             for item in nested: subprocess.run(['codesign','--force','--sign',identity,str(item)],check=True)

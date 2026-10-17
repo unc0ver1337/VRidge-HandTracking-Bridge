@@ -1,131 +1,130 @@
-# VRidge Hand Tracking Bridge
+# VRidge Hand Tracking Bridge 2.0 — MediaPipe
 
-Две руки через ultra-wide камеру iPhone внутри VRidge → Windows → Knuckles в SteamVR.
-Один Xbox 360 управляет кнопками обеих VR-рук одновременно.
+iPhone с задней ultra-wide камерой отслеживает обе руки в VRidge и отправляет
+положение, ориентацию и скелет в Windows. ПК привязывает руки к шлему, фильтрует
+движение, принимает Xbox 360 и передаёт контроллеры существующему
+[GlassVR DaniXmir](https://github.com/DaniXmir/GlassVr). Собственный OpenVR-драйвер
+не создаётся. Библиотека внедряется в VRidge, основной executable не заменяется.
 
-**Основа SteamVR-интеграции — [GlassVR, автор DaniXmir](https://github.com/DaniXmir/GlassVr).**
-Используются его OpenVR-драйвер, Index profile, UDP и скелетная анимация. Это не
-новый самостоятельно написанный SteamVR-драйвер. Наш код: iOS Vision dylib,
-discovery/протокол, реконструкция, фильтрация, привязка к HMD, Xbox mapping,
-центровка и патч GlassVR, который удерживает контроллеры подключёнными и обновляет tracking-valid state.
+**В 2.0 трекинг полностью переведён на MediaPipe. Захват — 640×480, 30 FPS.**
+Apple Vision tracker, старый nonlinear 2D→3D solver, шаблон размеров кисти,
+калибровка размеров и назначение «первая рука = правая» удалены из текущего кода.
+Ручная центровка Back+Start сохранена. Старые версии доступны в истории Git.
 
-## Текущие настройки
+## Установка готового релиза
 
-Определение стороны восстановлено через Vision с временным сопоставлением. Порядок появления больше не назначает левую/правую роль.
+1. Скачайте ZIP из [Releases](https://github.com/unc0ver1337/VRidge-HandTracking-Bridge/releases)
+   и распакуйте **целиком** в отдельную папку. Python устанавливать не нужно.
+2. Закройте старый Windows bridge. Запускайте только один bridge: GlassVR
+   контроллеры общие. Не смешивайте EXE 1.x с IPA 2.0.
+3. Установите `iOS/VRidge-HandTracking-2.0-Unsigned.ipa` совместимым способом
+   с переподписью. IPA **unsigned**, нужны подходящие среда/подпись и разрешения
+   Camera/Local Network. В основном релизе bundle ID — `com.riftcat.vridge2`:
+   установка обновляет обычный VRidge, а не экспериментальный клиент.
+4. GlassVR должен быть зарегистрирован в SteamVR и настроен на UDP. Если он уже
+   установлен и работал с 1.x/экспериментом, переустановка драйвера не нужна.
+   В ZIP сохранена прежняя исправленная DLL и патчи; она не изменена в 2.0 и не
+   устанавливается автоматически. При ручной замене DLL сначала закройте SteamVR.
+   Для первой установки драйвера используйте инструкции проекта GlassVR.
+5. Телефон и ПК подключите к одной доступной локальной сети или точке доступа ПК.
+   Запустите SteamVR и `Windows/Start-Bridge.cmd`, затем VRidge на iPhone.
+   Сервер объявляется как GlassVR iPhone Bridge на всех IPv4-интерфейсах.
+6. Если Firewall блокирует подключение, один раз запустите
+   `Windows/Allow-Local-Network.ps1` от администратора: UDP39580 и mDNS5353,
+   только локальные подсети. Изоляцию Wi-Fi клиентов и маршрутизацию скрипт
+   обойти не может. Проверьте в консоли подключение телефона и packet loss.
 
-Сохранённый хват отменён: центровка Back+Start действует только на текущий сеанс. [Подробности](docs/SESSION_CENTERING.md).
+Экспериментальный MediaPipe-клиент использует совместимый MPBR/v2, но для
+полного обновления установите IPA основного релиза. Vision IPA 1.x несовместима.
 
-## Версия 1.1
+## Центровка и Xbox 360
 
-30 FPS, отдельная оценка ладони и артикуляции, удержание перекрытых пальцев, исправленный tracking state GlassVR. [Изменения и ограничения](docs/RELEASE_1_1.md).
+Держите контроллеры в удобном нейтральном направлении и **нажмите Back+Start**.
+Пока комбинация удерживается, направление центрируется по текущей позе руки.
+После отпускания поправка остаётся только до завершения bridge. Автоматических
+центровок и сохранения индивидуального хвата нет; можно повторять по необходимости.
 
-## Скачать и запустить
+| Xbox 360 | Левый контроллер | Правый контроллер |
+|---|---|---|
+| LT / RT | LT — trigger | RT — trigger |
+| LB / RB | LB — grip | RB — grip |
+| Стики | Левый stick + LS | Правый stick + RS |
+| Меню | X | Y |
+| System | Back | Start |
 
-**[ZIP в Releases](https://github.com/vanyaponpon1337-web/VRidge-HandTracking-Bridge/releases)**
-содержит Windows EXE с зависимостями, config, unsigned IPA, отдельную dylib,
-исправленную DLL GlassVR и документацию.
+Back+Start подавляет отдельные System-события до отпускания. A/B по умолчанию
+не назначены; привязки редактируются в config.yaml. Оба контроллера отслеживаются
+независимо. При отключении Xbox кнопки отпускаются. Стики передаются как Index
+thumbsticks, не trackpads; действия меню зависят от SteamVR bindings игры.
 
-**[Полный пошаговый туториал](docs/RELEASE_INSTALL.md)**
+## Где выполняется обработка
 
-1. Установить SteamVR/VRidge и официальный GlassVR, включить два Index controller.
-2. При выключенном SteamVR установить patched `GlassVR/driver_glassvr.dll`, сохранив
-   оригинал. Выбрать UDP для position/rotation/input/skeletal обеих рук.
-3. Полностью распаковать релиз и запустить `Windows/Start-Bridge.cmd`.
-4. Установить IPA совместимым способом, разрешить Camera/Local Network, открыть
-   VRidge. Телефон/ПК — одна LAN, Firewall должен пропускать bridge и mDNS.
-5. Показать руки задней камере, проверить движения, кнопки и восстановление tracking после потери рук.
+```text
+iPhone ultra-wide 640×480 / 30 FPS
+    → MediaPipe Hand Landmarker: 2 руки, handedness, 21 world landmarks
+    → fit camera translation + palm quaternion на iPhone
+    → MPBR/v2 UDP, latest frame only, clock sync / heartbeat
+Windows: роли рук → HMD pose на момент кадра → фильтры → GlassVR → SteamVR
+Xbox 360 → отдельный input loop ────────────────────────┘
+```
 
-**IPA unsigned:** для stock iOS нужна подходящая переподпись. iOS15+, ARM64 и
-задняя ultra-wide камера обязательны. Исходная IPA предоставлена владельцем
-проекта; её публичное включение в релиз подтверждено им отдельно. Сам VRidge
-остаётся проприетарным приложением RiftCat.
+MediaPipe работает в video mode на фоновой serial queue: занятый обработчик
+пропускает кадр, очередь изображений не накапливается. Камера сохраняет native
+sensor orientation без зеркалирования и поворотов вслед за интерфейсом.
+При конфликте камеры VRidge получает приоритет; трекер приостанавливается.
+Новых окон/панелей в iOS нет, только стандартные уведомления.
 
-Windows EXE не требует Python; `_internal` должен оставаться рядом. GUI GlassVR
-устанавливается отдельно из upstream Releases. Наш bridge — консольное приложение;
-внутри iOS дополнительные окна и панели не создаются.
+ПК не восстанавливает 3D через IK: он принимает готовую pose/21 joints.
+Сторону задаёт MediaPipe; temporal association уменьшает смену ролей при flicker.
+Положение и quaternion фильтруются отдельно; пальцы обрабатываются независимо.
+Вырожденный сегмент одного пальца не убирает валидную позу контроллера:
+до 350 мс удерживается его последняя достоверная поза, затем плавно используется
+нейтральная. Такой палец помечается invalid, а не измеренным.
 
-## Возможности
+При исчезновении руки/потере связи tracking validity сбрасывается, устройства
+GlassVR остаются подключёнными: это предотвращает повторное создание устройств.
+После возвращения руки действует ограничение скачка/предсказания. HMD pose берётся
+в RawAndUncalibrated, чтобы SteamVR применил room transform ровно один раз.
 
-* Vision: до двух рук, 21 landmark/confidence, camera intrinsics, capture timestamp.
-* Ultra-wide, 640×480, capture60FPS при поддержке и адаптация к 30FPS.
-* Bonjour, handshake, heartbeat, clock sync, reconnect, binary UDP ≤568 bytes.
-* Sequence/loss/age checks и bounded latest-frame processing.
-* Кинематическая модель с длинами костей, reprojection optimization,
-  confidence/temporal priors и неопределённостью; фиксированный Z не используется.
-* One Euro translation, quaternion filtering, ограниченное prediction.
-* Raw OpenVR HMD pose: room transform применяется один раз.
-* Два Index: pose/input, пять curls/splays → GlassVR 31-bone skeleton.
-* Независимый Xbox input, deadzone, analog triggers, отпускание при отключении.
-* Удержание Back+Start: постоянная центровка **курсоров** вперёд по HMD.
-* Потерянная рука скрывается через 350ms и возвращается при tracking.
-* Console FPS/latency/loss/reconstruction logs с ротацией.
+## Ограничения
 
-## Xbox 360
+World landmarks MediaPipe — оценка модели с центром у кисти, не абсолютные
+измерения камерой глубины. Положение в camera space вычисляется на телефоне
+из 2D/3D palm anchors и intrinsics с проверкой reprojection/cheirality.
+Масштаб, окклюзии и ракурсы ребром оставляют неоднозначность. Depth sigma в
+логах — эвристический нижний порог неопределённости, не измеренная ковариация.
+Per-joint confidence модель здесь не даёт: points[:,2] обозначает availability.
 
-Начиная с v1.0.1 обнаружение работает на всех локальных IPv4-адаптерах, включая
-точку доступа Windows, с проверкой новых интерфейсов каждые 5 секунд.
-Оставьте `advertise_ip: null` и `bind_ip: 0.0.0.0` для автоматического режима.
-Подробнее: [Wi-Fi, Ethernet и hotspot](docs/NETWORK_INTERFACES.md).
+По сети идут 21 точка 3D каждой руки. Текущий совместимый API GlassVR получает
+pose + пять curls/пять splays и симулирует OpenVR skeleton. Независимое управление
+всеми фалангами не заявляется. Реальные FPS, нагрев и задержка зависят от iPhone
+и одновременного стриминга VRidge; 30 FPS — целевой захват, а не гарантия inference.
 
-| Xbox | Действие |
-|---|---|
-| X / Y | B левого / правого Index — меню по bindings игры |
-| Back / Start отдельно | System левой / правой руки |
-| LT / RT | Analog trigger левой / правой руки |
-| LB / RB | Grip левой / правой руки |
-| Левый / правый стик | Thumbstick соответствующей руки |
-| LS / RS click | Thumbstick click |
-| Back + Start удерживать | Постоянно центрировать курсоры вперёд |
+Пользователь подтвердил улучшение экспериментальной MediaPipe-версии. Это не
+заменяет отдельную аппаратную проверку финального пакета 2.0 после установки.
 
-Центровка сохраняет позиции и задаёт нейтральную ориентацию. Результат записывается
-в `orientation.local.yaml`; его загрузка описана в туториале. A/B Xbox свободны.
-Меню через B определяется игрой. Нажимайте сочетание вместе: отдельная кнопка,
-нажатая раньше второй, может успеть отправить System.
-
-## Проверки и ограничения
-
-Владелец проверял iPhone→Windows и контроллеры на реальном оборудовании.
-После патча проверены реальные OpenVR connected/valid flags. Локально проходят
-47 автоматических тестов. Результаты сборки EXE и CI приведены в release notes.
-Не заявляем измеренную полную display latency, независимую ground-truth точность,
-совместимость со всеми играми или длительный аппаратный soak test.
-
-Монокулярная RGB-камера не даёт однозначный 6DoF при всех ракурсах. Окклюзии,
-edge-on ладонь, crossing и быстрые движения могут давать ошибки ориентации,
-identity или отклонённые позы. Нужна калибровка ладони, линзы и крепления к HMD.
-Скелет GlassVR приближённый: независимые 3D-joint poses не передаются.
-Haptics обратно к Xbox отсутствуют. 30–60FPS всего pipeline не гарантированы.
-
-Патч DLL нужен для invalid-флага потерянной руки; официальная переустановка
-GlassVR может его перезаписать. Bridge управляет enable flags GlassVR — не
-переключайте их одновременно вручную.
-
-## Сборка из исходников
+## Исходники и сборка
 
 ```powershell
 py -3 -m venv .venv
-.venv\Scripts\python -m pip install -r pc\requirements.txt
-.venv\Scripts\python -m pytest -q
-.venv\Scripts\python -m pc.bridge --config pc\config.yaml
-powershell -File scripts\build_windows.ps1
+.venv\Scripts\python.exe -m pip install -r pc/requirements.txt
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m pc.bridge --config pc/config.yaml
 ```
 
-macOS/Xcode: `bash ios/build.sh`. Упаковка собственной расшифрованной IPA:
+Windows EXE: `powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1`.
+На Mac: `bash ios/build.sh`. SDK MediaPipe 1.1.1 и модель float16/v1 скачиваются
+с проверкой pinned SHA256. Модель должна быть рядом с готовой dylib при упаковке.
 
-```powershell
-python scripts/package_ipa.py --ipa original.ipa --dylib VRidgeHandTracking.dylib --output private/VRidge-Unsigned.ipa
-```
+Для исходной decrypted IPA: `python -m scripts.package_ipa --ipa private/original.ipa
+--dylib artifacts/ios/VRidgeHandTracking.dylib --output artifacts/iOS/VRidge-HandTracking-2.0-Unsigned.ipa`.
+Для уже инжектированной IPA используйте `scripts.update_injected_ipa` с теми же
+аргументами: executable сохраняется побайтно. Подпись/profiles — отдельно;
+package_ipa поддерживает identity/profile/entitlements на macOS. Проприетарная
+IPA не коммитится и не передаётся в CI. В релиз она упаковывается локально.
 
-Упаковщик добавляет LC_LOAD_DYLIB в проверенное свободное место заголовка,
-библиотеку и metadata разрешений. Основной код VRidge не заменяется. Signing
-на macOS описан в технической истории; сертификаты и profiles в Git не входят.
-
-* [Пошаговая установка и диагностика](docs/RELEASE_INSTALL.md)
-* [Протокол](docs/PROTOCOL.md)
-* [Патч драйвера и проверка](docs/DRIVER_VISIBILITY_FIX.md)
-* [Центровка и видимость](docs/LIVE_CENTER_AND_VISIBILITY.md)
-* [HMD/raw координаты](docs/HEAD_RELATIVE_FIX.md)
-* [Историческая архитектура и первоначальные проверки](docs/ARCHITECTURE_HISTORY.md)
-* [Атрибуция GlassVR, VRidge и зависимостей](THIRD_PARTY.md)
-
-MIT распространяется на наш код, а не на сторонние приложения и библиотеки.
+GitHub Actions собирает ARM64 dylib и Windows EXE. `scripts.package_release`
+проверяет согласованность IPA/dylib/model и формирует ZIP, BUILD.json и SHA256.
+[Проверки и аппаратный checklist](docs/VALIDATION.md),
+[wire protocol](docs/PROTOCOL.md), [лицензии/авторы](THIRD_PARTY.md),
+[официальная документация MediaPipe](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/ios).
