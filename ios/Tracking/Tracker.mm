@@ -154,7 +154,7 @@
     VHHeader header={}; memcpy(header.magic,"MPBR",4);header.version=2;header.sequence=_sequence++; header.width=_width;header.height=_height;
     // Convert sample time from capture session clock into host clock used by sync.
     CMTime pts=CMSampleBufferGetPresentationTimeStamp(sample);
-    CMClockRef clock=_session.masterClock;
+    CMClockRef clock=_session.synchronizationClock;
     header.capture=CMTimeGetSeconds(clock?CMSyncConvertTime(pts,clock,CMClockGetHostTimeClock()):pts);
     CFTypeRef attachment=CMGetAttachment(sample,kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix,nullptr);
     if(attachment&&CFGetTypeID(attachment)==CFDataGetTypeID()&&CFDataGetLength((CFDataRef)attachment)>=(CFIndex)sizeof(matrix_float3x3)){

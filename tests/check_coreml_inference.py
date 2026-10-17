@@ -18,7 +18,7 @@ subprocess.run(['clang++','-std=c++17','-O2','-ffp-contract=off','-fobjc-arc','-
 with tempfile.TemporaryDirectory() as temp:
     temp=Path(temp);bundle=temp/'Models.bundle';bundle.mkdir()
     (bundle/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'test.coreml.models','CFBundlePackageType':'BNDL'}))
-    for name in ('hand_detector','hand_landmarks_detector'):shutil.copytree(root/'ios/build'/f'{name}.mlmodelc',bundle/f'{name}.mlmodelc')
+    for name in ('hand_detector','hand_landmarks_detector'):shutil.copytree(root/'ios/build/host'/f'{name}.mlmodelc',bundle/f'{name}.mlmodelc')
     photo=cv2.imread(str(root/'ios/assets/reference/armandhand.JPG'));assert photo is not None
     rgb=cv2.cvtColor(cv2.resize(photo,(640,480)),cv2.COLOR_BGR2RGB)
     detector,landmark=Backend('hand_detector'),Backend('hand_landmarks_detector')

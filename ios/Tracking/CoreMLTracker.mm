@@ -58,7 +58,7 @@ struct PixelLock {
         _detectorFeatures=[[MLDictionaryFeatureProvider alloc]initWithDictionary:@{@"image":[MLFeatureValue featureValueWithMultiArray:_detectorInput]} error:error];
         _landmarkFeatures=[[MLDictionaryFeatureProvider alloc]initWithDictionary:@{@"image":[MLFeatureValue featureValueWithMultiArray:_landmarkInput]} error:error];
         if(!_detectorFeatures||!_landmarkFeatures)return nil;
-        NSLog(@"Core ML preview loaded fp16 models; computeUnits=CPUAndNeuralEngine, numHands=2");
+        NSLog(@"Core ML preview loaded fp16 models; computeUnits=%ld, numHands=2",(long)config.computeUnits);
     }return self;
 }
 - (void)reset {_tracked.clear();_lastCapture=0;}
@@ -70,7 +70,7 @@ struct PixelLock {
     if(!lock.locked||CVPixelBufferGetPixelFormatType(buffer)!=kCVPixelFormatType_32BGRA){fail(error,@"Core ML expects readable BGRA frame");_tracked.clear();return hands;}
     const uint8_t *image=(const uint8_t *)CVPixelBufferGetBaseAddress(buffer);
     int iw=(int)CVPixelBufferGetWidth(buffer),ih=(int)CVPixelBufferGetHeight(buffer),stride=(int)CVPixelBufferGetBytesPerRow(buffer);
-    std::vector<Rect> rects=_tracked;std::vector<std::vector<float>> raw;
+    std::vector<corehands::Rect> rects=_tracked;std::vector<std::vector<float>> raw;
     if(rects.size()<2){
         float side=std::max(iw,ih);crop(image,iw,ih,stride,{.5f,.5f,side/iw,side/ih,0},192,false,(float *)_detectorInput.dataPointer);
         auto result=[_detector predictionFromFeatures:_detectorFeatures error:error];

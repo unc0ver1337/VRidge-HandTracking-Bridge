@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")"
-mkdir -p build
+mkdir -p build/host
 python3 fetch_dependencies.py
 for NAME in hand_detector hand_landmarks_detector; do
-  xcrun coremlcompiler compile "assets/$NAME.mlpackage" build
+  xcrun coremlcompiler compile "assets/$NAME.mlpackage" build --platform ios --deployment-target 16.0
+  xcrun coremlcompiler compile "assets/$NAME.mlpackage" build/host
   test -d "build/$NAME.mlmodelc"
 done
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"

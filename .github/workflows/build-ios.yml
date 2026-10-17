@@ -35,7 +35,7 @@ jobs:
       - name: Compare native geometry and crop against pinned upstream
         run: python tests/check_coreml_math.py
       - name: Compare native Core ML inference against upstream Python
-        run: python tests/check_coreml_inference.py
+        run: python tests/check_coreml_inference.py | tee ios/build/coreml-parity.json
       - name: Verify ARM64 load commands
         run: |
           file ios/build/VRidgeHandTracking.dylib
@@ -44,5 +44,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ios-coreml-preview
-          path: ios/build/
+          path: |
+            ios/build/VRidgeHandTracking.dylib
+            ios/build/hand_detector.mlmodelc/
+            ios/build/hand_landmarks_detector.mlmodelc/
+            ios/build/load-commands.txt
+            ios/build/SHA256SUMS
+            ios/build/coreml-parity.json
           retention-days: 14
