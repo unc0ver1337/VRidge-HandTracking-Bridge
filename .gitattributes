@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ipa binary
+*.dll binary
+*.dylib binary
+*.exe binary
+*.task binary
+*.zip binary
