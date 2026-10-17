@@ -15,7 +15,7 @@
     dispatch_queue_t _captureQueue; dispatch_queue_t _inferenceQueue;
     MPPHandLandmarker *_request; NSInteger _lastTimestamp; CIContext *_context;
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
-    uint32_t _sequence; double _meanMS; unsigned _samples;
+    uint32_t _sequence;
     CVPixelBufferPoolRef _pool; int _width,_height;
     NSHashTable<AVCaptureSession *> *_hostSessions;
     NSHashTable<AVCaptureSession *> *_ownedSessions;
@@ -70,8 +70,11 @@
     double desired=30; // Stable 30 FPS capture and MediaPipe budget.
     for(AVCaptureDeviceFormat *format in _camera.formats){
         CMVideoDimensions d=CMVideoFormatDescriptionGetDimensions(format.formatDescription);
-        double maxFPS=0; for(AVFrameRateRange *r in format.videoSupportedFrameRateRanges)maxFPS=MAX(maxFPS,r.maxFrameRate);
-        if(maxFPS<30)continue;
+        double maxFPS=0;bool supports30=false;
+        for(AVFrameRateRange *r in format.videoSupportedFrameRateRanges){
+            maxFPS=MAX(maxFPS,r.maxFrameRate);if(r.minFrameRate<=30&&r.maxFrameRate>=30)supports30=true;
+        }
+        if(!supports30)continue;
         double v=fabs((double)d.width-_width)+fabs((double)d.height-_height)+(maxFPS<desired?2000:0);
         if(v<score){score=v; best=format;bestFPS=MIN(desired,maxFPS);}
     }
@@ -99,7 +102,6 @@
     _wanted=NO;
     dispatch_async(_captureQueue,^{
         [self teardown];
-        self->_samples=0;self->_meanMS=0;
     });
 }
 - (void)teardown {
@@ -168,7 +170,7 @@
         header.fx=header.fy=f*scale;header.cx=_width*.5;header.cy=_height*.5;
     }
     dispatch_async(_inferenceQueue,^{ @autoreleasepool {
-        double begin=CFAbsoluteTimeGetCurrent(); NSError *error=nil;
+        NSError *error=nil;
         MPPImage *image=[[MPPImage alloc] initWithPixelBuffer:scaled error:&error];
         CVPixelBufferRelease(scaled);
         NSInteger stamp=MAX(self->_lastTimestamp+1,(NSInteger)(header.capture*1000));self->_lastTimestamp=stamp;
@@ -217,15 +219,6 @@
             }
             NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];[data appendData:body];if(self.frame)self.frame(data);
         }else NSLog(@"MediaPipe frame error: %@",error);
-        double ms=(CFAbsoluteTimeGetCurrent()-begin)*1000; self->_meanMS=self->_samples?self->_meanMS*.9+ms*.1:ms;
-        self->_samples++;
-        if(self->_samples==120&&self->_meanMS>25){
-            dispatch_async(self->_captureQueue,^{
-                NSError *e=nil;if([self->_camera lockForConfiguration:&e]){
-                    self->_camera.activeVideoMinFrameDuration=CMTimeMake(1,30);self->_camera.activeVideoMaxFrameDuration=CMTimeMake(1,30);[self->_camera unlockForConfiguration];
-                }
-            });
-        }
         self->_busy=false;
     }});
 }
