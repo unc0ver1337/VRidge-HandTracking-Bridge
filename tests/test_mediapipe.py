@@ -76,4 +76,4 @@ def test_production_contains_no_vision_fallback_or_old_solver():
     assert not (root/'pc/reconstruction/calibration.py').exists()
     tracker=(root/'ios/Tracking/Tracker.mm').read_text()
     assert 'VNDetectHumanHandPoseRequest' not in tracker
-    assert 'MPPHandLandmarker' in tracker and '_width=640; _height=480;' in tracker
+    assert 'VHCoreMLTracker' in tracker and '_width=640; _height=480;' in tracker

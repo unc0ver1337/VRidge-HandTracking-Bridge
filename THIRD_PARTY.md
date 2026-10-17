@@ -37,3 +37,12 @@ frameworks, not redistributed binaries. MediaPipe SDK is statically linked in
 the injected library; the .task model is included in the IPA.
 
 No affiliation with Valve, Apple, RiftCat, or DaniXmir is claimed.
+
+
+Core ML preview native pipeline is adapted from Vimal Mollyn's
+Mediapipe-Hands-PyTorch-CoreML / fasthands (MIT), pinned revision
+565d188 (full hash in ios/fetch_dependencies.py). License is preserved in
+third_party/FastHands-LICENSE.txt. The bundled stock fp16 model weights are
+Google MediaPipe weights (Apache-2.0); WHIM fine-tuned weights are not used.
+The author reports performance on M4; this project does not claim those
+measurements apply to iPhone 16 or two-hand tracking beside VRidge.
