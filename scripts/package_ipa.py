@@ -9,7 +9,7 @@ from pathlib import Path
 LOAD_PATH='@executable_path/Frameworks/VRidgeHandTracking.dylib'
 
 def coreml_info(info):
-    info['CFBundleDisplayName']='VRidge Hand Tracking 2.5'
+    info['CFBundleDisplayName']='VRidge Hand Tracking 2.5.1'
     info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands with Core ML while VRidge streams VR.'
     info['NSLocalNetworkUsageDescription']='Find the GlassVR iPhone Bridge and stream hand tracking.'
     info['NSBonjourServices']=sorted((set(info.get('NSBonjourServices',[]))-{'_vhbridge._udp'})|{'_mpbridge._udp'})

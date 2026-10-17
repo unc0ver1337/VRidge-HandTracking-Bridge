@@ -32,33 +32,18 @@ def main():
     server=Server(**cfg['network']); decoder=Decoder(); identity=Identity()
     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}; glass=GlassVR(**cfg['glassvr']); space=Space(cfg['space'])
     presence=DevicePresence();inputs=InputManager(glass,cfg['xinput'],cfg['mapping'],presence); current={}; n=0; solved_ms=[]; latencies=[]; report=time.monotonic(); started=False
-    active_session=None; quality={};reasons={}; latest_orientation={}
+    active_session=None; quality={};reasons={}
     try:
         server.start(); started=True; space.start();presence.start();inputs.start();run_start=time.monotonic()
         while True:
             now=time.monotonic()
             if args.duration>0 and now-run_start>=args.duration:break
             buttons,events=inputs.take()
-            centering='center_orientation' in events
-            if events:
-                for event in events:
-                    if event=='center_orientation':
-                        centered=[]
-                        for side,(quaternion,stamp) in latest_orientation.items():
-                            if now-stamp<.35:
-                                space.center_orientation(quaternion,side);centered.append(side)
-                    elif event=='center_orientation_release':
-                        log.info('Manual centering released; correction retained for this session only')
-                    elif event=='recenter':
-                        # Camera/HMD mount is a physical extrinsic. Recenter only temporal
-                        # estimates; SteamVR dashboard owns universe recentering.
-                        identity=Identity(); filters={s:PoseFilter(**cfg['filter']) for s in (1,2)}
-                        log.info('Temporal state reset; use SteamVR recenter for the tracking universe')
             item=server.take()
             if item:
                 f,capture_pc,received=item; current={}
                 if f.session!=active_session:
-                    active_session=f.session;identity=Identity();latest_orientation.clear()
+                    active_session=f.session;identity=Identity()
                     filters={s:PoseFilter(**cfg['filter']) for s in (1,2)};glass.fingers.clear()
                 for side,hand in identity.update(f.hands,f.capture).items():
                     current[side]=(side,hand,f)
@@ -66,16 +51,13 @@ def main():
                         if time.monotonic()-capture_pc>.2:raise ValueError('frame already stale before decode')
                         pose=decoder.decode(hand,side)
                         if time.monotonic()-capture_pc>.2:raise ValueError('output exceeded pose freshness budget')
-                        if centering:space.center_orientation(pose.quaternion,side)
                         # Transform using head pose at CAPTURE, filter in WORLD coordinates.
                         p,q=space.transform(pose.position,pose.quaternion,capture_pc,side)
-                        target_q=q.copy();p,q=filters[side].update(p,q,capture_pc)
-                        if centering:q=target_q;filters[side].q=q.copy()
+                        p,q=filters[side].update(p,q,capture_pc)
                         # Drop results that exceeded the output budget; never render a
                         # stale cold-start result or overwrite fresh XInput state.
                         if time.monotonic()-capture_pc>.2:raise ValueError('output exceeded pose freshness budget')
                         glass.send(side,p,q,{},pose.angles,include_input=False,sample_time=capture_pc,finger_valid=pose.finger_valid); inputs.tracked(side,time.monotonic())
-                        latest_orientation[side]=(pose.quaternion.copy(),time.monotonic())
                         solved_ms.append(pose.solve_ms)
                         quality[side]={'orientation_held':pose.orientation_held,'palm_reprojection_px':round(pose.palm_rmse,2),'valid_fingers':int(np.count_nonzero(pose.finger_valid)),'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
                     except ValueError as error:

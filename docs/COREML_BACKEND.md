@@ -1,7 +1,7 @@
-# Core ML backend 2.5
+# Core ML backend 2.5.1
 
 Проверенный preview перенесён в основной клиент 2.5. Windows и GlassVR используют прежний совместимый протокол.
-640×480/30 FPS, две руки и Back+Start сохранены; wire protocol MPBR/v2 совместим.
+640×480/30 FPS и две руки сохранены; ручная центровка в 2.5.1 удалена; wire protocol MPBR/v2 совместим.
 
 Основа: [Vimal Mollyn / fasthands](https://github.com/VimalMollyn/Mediapipe-Hands-PyTorch-CoreML),
 revision 565d18818104a315887c611c84125f382dfcf6aa. Используются stock Google

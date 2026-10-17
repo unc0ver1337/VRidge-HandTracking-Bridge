@@ -12,15 +12,18 @@ def test_devices_stay_connected_tracking_validity_changes_per_hand(tmp_path):
     v.update({1:False,2:True});v.flush();d=json.loads(p.read_text());assert d['enable cl'] and d['enable cr'] and not d['tracking cl'] and d['tracking cr']
     v.close();d=json.loads(p.read_text());assert d['enable cl'] and d['enable cr'] and not d['tracking cr']
 
-def test_center_actual_tip_instead_of_controller_body():
-    cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)
-    head=Rotation.from_euler('xyz',[.2,.7,-.1]);s.history.append((10,head.as_matrix(),np.zeros(3)))
-    s.tip[2]=Rotation.from_euler('xyz',[-.7,.08,0])
-    for a in ([.2,.3,.4],[.7,-.4,.1]):
-        palm=Rotation.from_euler('xyz',a);s.center_orientation(palm.as_quat(),2)
-        _,q=s.transform(np.array([0,0,.4]),palm.as_quat(),10,2)
-        ray=Rotation.from_quat(q)*s.tip[2]
-        np.testing.assert_allclose(ray.apply([0,0,-1]),head.apply([0,0,-1]),atol=1e-12)
+def test_saved_default_offsets_survive_relaunch_without_centering_api():
+    from pc.glassvr.grip import DEFAULT_GRIP_XYZW
+    cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space']
+    first,second=Space(cfg),Space(cfg)
+    assert not hasattr(first,'center_orientation') and not hasattr(first,'session_grip')
+    assert not hasattr(first,'tip')
+    for side in (1,2):
+        np.testing.assert_allclose(first.grip[side].as_quat(),DEFAULT_GRIP_XYZW[side],atol=1e-15)
+        np.testing.assert_allclose(first.grip[side].as_matrix(),second.grip[side].as_matrix(),atol=1e-15)
+        assert abs(np.linalg.norm(DEFAULT_GRIP_XYZW[side])-1)<1e-12
+    assert not np.allclose(first.grip[1].as_matrix(),first.grip[2].as_matrix())
+
 
 def test_driver_and_bridge_tracking_key_contract():
     patch=Path('patches/glassvr-stable-controller-connection.patch').read_text()

@@ -1,4 +1,4 @@
-name: VRidge 2.5 Core ML build and parity
+name: VRidge 2.5.1 Core ML build and parity
 on:
   push:
   pull_request:
@@ -53,7 +53,7 @@ jobs:
           shasum -a 256 ios/build/VRidgeHandTracking.dylib > ios/build/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: ios-coreml-2.5
+          name: ios-coreml
           path: |
             ios/build/VRidgeHandTracking.dylib
             ios/build/hand_detector.mlmodelc/

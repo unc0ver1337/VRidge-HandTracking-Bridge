@@ -19,15 +19,6 @@ space:
   - 0.0
   - 0.0
   - 0.0
-  grip_rotation_deg:
-    '1':
-    - 0.0
-    - 0.0
-    - 0.0
-    '2':
-    - 0.0
-    - 0.0
-    - 0.0
   static_origin_m:
   - 0.0
   - 1.6
@@ -50,7 +41,6 @@ mapping:
   joy_btn: x
   system: dpad_up
   mode: y
-  recenter: back
   layout: dual
   left_menu: x
   right_menu: y
