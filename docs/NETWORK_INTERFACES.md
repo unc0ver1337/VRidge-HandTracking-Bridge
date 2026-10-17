@@ -9,14 +9,13 @@ supported. UDP listens on 0.0.0.0 by default.
 
 Keep `network.advertise_ip: null` and `network.bind_ip: 0.0.0.0` for automatic
 all-interface discovery. An explicit advertise_ip or bind_ip remains a deliberate
-single-interface override. This fix is PC-side; existing iOS IPA uses the same
-Bonjour protocol and need not be replaced for this change.
+single-interface override. 2.0 requires a MediaPipe MPBR/v2 client; old Vision VHBR clients must be replaced.
 
 Windows may classify Wi-Fi/hotspot as Public. Run
-`scripts/allow_local_network.ps1` as Administrator once to allow inbound UDP39570
+`scripts/allow_local_network.ps1` as Administrator once to allow inbound UDP39580
 and mDNS UDP5353 from LocalSubnet on all profiles. These rules do not open the
 server to arbitrary Internet addresses. If using a different stream port, adapt
-the UDP39570 rule accordingly.
+the UDP39580 rule accordingly.
 
 This covers locally reachable IPv4 networks, not arbitrary separated Internet
 networks. Bonjour does not cross routers by default; AP isolation, VPN routing

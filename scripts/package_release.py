@@ -1,9 +1,9 @@
 """Create the release bundle; never install or launch anything."""
-import argparse,hashlib,json,plistlib,struct,zipfile
+import argparse,hashlib,json,plistlib,struct,zipfile,subprocess
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-BUNDLE_ID='com.riftcat.vridge2'
+BUNDLE_PREFIX='com.riftcat.vridge2'
 
 def package(ipa,windows,ios,output,commit,ci_run):
     ipa,windows,ios,output=map(Path,(ipa,windows,ios,output))
@@ -16,7 +16,7 @@ def package(ipa,windows,ios,output,commit,ci_run):
         if archive.testzip():raise ValueError('corrupt IPA')
         name=next(n for n in archive.namelist() if n.startswith('Payload/') and n.count('/')==2 and n.endswith('/Info.plist'))
         root=name.rsplit('/',1)[0];info=plistlib.loads(archive.read(name))
-        if info['CFBundleIdentifier']!=BUNDLE_ID:raise ValueError('unexpected VRidge bundle ID')
+        if not info['CFBundleIdentifier'].startswith(BUNDLE_PREFIX) or '.mediapipe.experimental' in info['CFBundleIdentifier']:raise ValueError('unexpected VRidge bundle ID')
         if archive.read(root+'/Frameworks/VRidgeHandTracking.dylib')!=library:raise ValueError('IPA/dylib mismatch')
         if archive.read(root+'/hand_landmarker.task')!=model:raise ValueError('IPA/model mismatch')
         if any('/_CodeSignature/' in n or n.endswith('/embedded.mobileprovision') for n in archive.namelist()):raise ValueError('bundle is expected to be unsigned')
@@ -32,9 +32,13 @@ def package(ipa,windows,ios,output,commit,ci_run):
     files['GlassVR/driver_glassvr.dll']=(ROOT/'artifacts/driver_glassvr-visibility-fix.dll').read_bytes()
     for path in (ROOT/'patches').glob('*.patch'):files['GlassVR/patches/'+path.name]=path.read_bytes()
     for path in (ROOT/'docs').glob('*.md'):files['docs/'+path.name]=path.read_bytes()
-    for name in ('README.md','THIRD_PARTY.md','LICENSE','docs/VALIDATION.md','third_party/MediaPipe-LICENSE.txt'):
+    for name in ('README.md','THIRD_PARTY.md','LICENSE','VERSION','docs/VALIDATION.md','third_party/MediaPipe-LICENSE.txt'):
         files[name]=(ROOT/name).read_bytes()
-    files['BUILD.json']=json.dumps({'project':'VRidge Hand Tracking Bridge','version':'2.0.0','source_commit':commit,'ci_run':ci_run,'ipa_signed':False,'device_verified':False,'bundle_id':BUNDLE_ID,'network':'MPBR/v2 UDP39580','hardware_runtime_started_during_build':False},indent=2).encode()
+    for name in subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0'):
+        if not name:continue
+        if Path(name).suffix.lower() in ('.ipa','.p12','.mobileprovision','.key','.exe','.dll','.dylib','.zip'):raise ValueError('private binary in git index')
+        files['Source/'+name]=(ROOT/name).read_bytes()
+    files['BUILD.json']=json.dumps({'project':'VRidge Hand Tracking Bridge','version':'2.0.0','source_commit':commit,'ci_run':ci_run,'ipa_signed':False,'device_verified':False,'bundle_id':info['CFBundleIdentifier'],'network':'MPBR/v2 UDP39580','hardware_runtime_started_during_build':False},indent=2).encode()
     files['SHA256SUMS.txt']=''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(files.items())).encode()
     output.parent.mkdir(exist_ok=True,parents=True)
     temp=output.with_suffix('.zip.tmp')

@@ -9,9 +9,7 @@ from pathlib import Path
 LOAD_PATH='@executable_path/Frameworks/VRidgeHandTracking.dylib'
 
 def mediapipe_info(info):
-    info['CFBundleIdentifier']='com.riftcat.vridge2'
     info['CFBundleDisplayName']='VRidge Hand Tracking'
-    info.pop('CFBundleURLTypes',None)
     info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands with MediaPipe while VRidge streams VR.'
     info['NSLocalNetworkUsageDescription']='Find the GlassVR iPhone Bridge and stream hand tracking.'
     info['NSBonjourServices']=sorted((set(info.get('NSBonjourServices',[]))-{'_vhbridge._udp'})|{'_mpbridge._udp'})
