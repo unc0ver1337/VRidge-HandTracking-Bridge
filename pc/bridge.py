@@ -87,7 +87,7 @@ def main():
                         glass.send(side,p,q,{},pose.angles,include_input=False,sample_time=capture_pc); inputs.tracked(side,time.monotonic())
                         latest_orientation[side]=(pose.quaternion.copy(),time.monotonic())
                         solved_ms.append(pose.solve_ms)
-                        quality[side]={'palm_reprojection_px':round(pose.palm_rmse,2),'valid_fingers':int(np.count_nonzero(pose.finger_valid)),'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
+                        quality[side]={'orientation_held':pose.orientation_held,'palm_reprojection_px':round(pose.palm_rmse,2),'valid_fingers':int(np.count_nonzero(pose.finger_valid)),'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
                     except ValueError as error:
                         message=str(error);reasons[message]=reasons.get(message,0)+1
                     except Exception: log.exception('isolated hand processing failure')

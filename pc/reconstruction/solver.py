@@ -20,9 +20,12 @@ class Estimate:
     palm_facing: str
     finger_valid: np.ndarray = None
     palm_rmse: float = 0.
+    orientation_held: bool = False
 
 class Solver:
-    def __init__(self,palm_width_m=.085,bone_lengths_m=None,distortion=None,max_evaluations=22,warm_max_evaluations=8):
+    def __init__(self,palm_width_m=.085,bone_lengths_m=None,distortion=None,max_evaluations=22,warm_max_evaluations=8,max_rotation_speed_rad_s=12.):
+        if not np.isfinite(max_rotation_speed_rad_s) or max_rotation_speed_rad_s<=0:raise ValueError('rotation speed limit')
+        self.rotation_speed=float(max_rotation_speed_rad_s)
         self.model=Model(palm_width_m,bone_lengths_m); self.distortion=distortion
         self.palm_templates={s:self.model.local(np.zeros((5,4)),s)[[0,5,9,13,17]] for s in (1,2)}
         self.previous={}; self.max_eval=max_evaluations;self.warm_max_eval=warm_max_evaluations
@@ -44,7 +47,11 @@ class Solver:
         if np.count_nonzero(c>.3)<8 or np.count_nonzero(c[[0,5,9,13,17]]>.3)<3: raise ValueError('insufficient landmarks')
         old=self.previous.get(side); dt=frame.capture-old[1] if old else 100.
         continuous=old is not None and 0<dt<.35
+        recent=old is not None and 0<dt<2.
         initial=old[0].copy() if continuous else self.initial(uv,frame.intrinsics,side)
+        if recent and not continuous:
+            initial[3:]=old[0][3:] # Preserve branch through short fit failures.
+
         weights=np.sqrt(np.clip(c,0,1))[:,None]/2. # nominal 2 pixel measurement sigma
         def batch_residual(x):
             x=np.atleast_2d(x);points=self.model.forward_batch(x,side)
@@ -84,6 +91,20 @@ class Solver:
             palm=least_squares(palm_residual,np.clip(seed[:6],self.low[:6]+1e-6,self.high[:6]-1e-6),
                 jac=palm_jac,bounds=(self.low[:6],self.high[:6]),loss='soft_l1',f_scale=2.,max_nfev=budget)
             fixed=seed.copy();fixed[:6]=palm.x
+            held=False
+            if recent:
+                jump=(Rotation.from_rotvec(fixed[3:6])*Rotation.from_rotvec(old[0][3:6]).inv()).magnitude()
+                # Generous 12 rad/s motion envelope plus 20deg solver slack.
+                # Recovery does not grant an unbounded jump merely because time passed.
+                limit=.35+self.rotation_speed*min(max(dt,1/30),.1)
+                if jump>limit:
+                    held=True;fixed[3:6]=old[0][3:6]
+                    def translation_residual(position):
+                        v=fixed[:6].copy();v[:3]=position;return palm_residual(v)
+                    position=least_squares(translation_residual,fixed[:3],bounds=(self.low[:3],self.high[:3]),
+                        loss='soft_l1',f_scale=2.,max_nfev=budget)
+                    fixed[:3]=position.x
+
             def residual_angles(a):
                 x=fixed.copy();x[6:]=a;return batch_residual(x)[0]
             def finger_jacobian(a):
@@ -100,7 +121,7 @@ class Solver:
                     bounds=(self.low[6:],self.high[6:]),loss='soft_l1',f_scale=2.,max_nfev=budget)
                 if np.sum(residual_angles(alternative.x)**2)<np.sum(residual_angles(fingers.x)**2):fingers=alternative
             fixed[6:]=fingers.x
-            return SimpleNamespace(x=fixed,jac=palm.jac)
+            return SimpleNamespace(x=fixed,jac=palm.jac,held=held)
         starts=[initial]
         if not continuous:
             # Competing depth/tilt branch. A single view cannot always distinguish it.
@@ -131,4 +152,4 @@ class Solver:
         self.previous[side]=(fit.x.copy(),frame.capture)
         rotation=Rotation.from_rotvec(fit.x[3:6]);normal=rotation.apply([0,0,1])
         facing='edge/uncertain' if abs(normal[2])<.25 else 'toward' if normal[2]<0 else 'away'
-        return Estimate(fit.x[:3],rotation.as_quat(),points,fit.x[6:].reshape(5,4),rmse,sigma,True,(time.perf_counter()-start)*1000,normal,facing,finger_valid,float(palm_rmse))
+        return Estimate(fit.x[:3],rotation.as_quat(),points,fit.x[6:].reshape(5,4),rmse,sigma,True,(time.perf_counter()-start)*1000,normal,facing,finger_valid,float(palm_rmse),fit.held)
