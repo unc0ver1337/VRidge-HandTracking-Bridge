@@ -1,3 +1,9 @@
+> **CORE ML PREVIEW**, отдельная ветка для проверки на iPhone 16 / iOS18.5.
+> Рабочий релиз 2.0 не заменяется. Windows-сервер 2.0 совместим.
+> Подробности переноса, сборки и проверки: [COREML_PREVIEW](docs/COREML_PREVIEW.md).
+> В этой ветке iPhone использует нативный Core ML-порт fasthands вместо MediaPipe Tasks SDK.
+> Старые инструкции сборки MediaPipe ниже относятся к стабильной 2.0; для preview используй документ выше.
+
 # VRidge Hand Tracking Bridge 2.0 — MediaPipe
 
 iPhone с задней ultra-wide камерой отслеживает обе руки в VRidge и отправляет
