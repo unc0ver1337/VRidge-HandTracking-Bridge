@@ -1,4 +1,11 @@
-# VRidge Hand Tracking Bridge 2.0 — MediaPipe
+# VRidge Hand Tracking Bridge 2.5 — Core ML
+
+**Два автора, чьи проекты легли в основу:**
+- **[DaniXmir — GlassVR](https://github.com/DaniXmir/GlassVr)**: SteamVR/OpenVR, Index controllers и skeleton.
+- **[Vimal Mollyn — fasthands / MediaPipe Core ML](https://github.com/VimalMollyn/Mediapipe-Hands-PyTorch-CoreML)**: модели и pipeline, перенесённый здесь в Objective-C++ для iPhone.
+
+Модели MediaPipe разработаны Google; лицензии — [THIRD_PARTY](THIRD_PARTY.md). Core ML разрешены CPU и Neural Engine; GPU оставлен VRidge. Фактическое исполнение всех операций на ANE и конкретный прирост скорости не заявляются.
+
 
 iPhone с задней ultra-wide камерой отслеживает обе руки в VRidge и отправляет
 положение, ориентацию и скелет в Windows. ПК привязывает руки к шлему, фильтрует
@@ -6,7 +13,7 @@ iPhone с задней ultra-wide камерой отслеживает обе �
 [GlassVR DaniXmir](https://github.com/DaniXmir/GlassVr). Собственный OpenVR-драйвер
 не создаётся. Библиотека внедряется в VRidge, основной executable не заменяется.
 
-**В 2.0 трекинг полностью переведён на MediaPipe. Захват — 640×480, 30 FPS.**
+**В 2.5 проверенный Core ML preview перенесён в основной клиент. Захват — 640×480, 30 FPS.**
 Apple Vision tracker, старый nonlinear 2D→3D solver, шаблон размеров кисти,
 калибровка размеров и назначение «первая рука = правая» удалены из текущего кода.
 Ручная центровка Back+Start сохранена. Старые версии доступны в истории Git.
@@ -16,14 +23,14 @@ Apple Vision tracker, старый nonlinear 2D→3D solver, шаблон раз
 1. Скачайте ZIP из [Releases](https://github.com/unc0ver1337/VRidge-HandTracking-Bridge/releases)
    и распакуйте **целиком** в отдельную папку. Python устанавливать не нужно.
 2. Закройте старый Windows bridge. Запускайте только один bridge: GlassVR
-   контроллеры общие. Не смешивайте EXE 1.x с IPA 2.0.
-3. Установите `iOS/VRidge-HandTracking-2.0-Unsigned.ipa` совместимым способом
+   контроллеры общие. Не смешивайте EXE 1.x с IPA 2.5.
+3. Установите `iOS/VRidge-HandTracking-2.5-Unsigned.ipa` совместимым способом
    с переподписью. IPA **unsigned**, нужны подходящие среда/подпись и разрешения
    Camera/Local Network. Bundle ID и URL schemes исходной IPA сохраняются.
    Обновление уже установленного VRidge зависит от bundle ID и выбранной переподписи.
 4. GlassVR должен быть зарегистрирован в SteamVR и настроен на UDP. Если он уже
    установлен и работал с 1.x/экспериментом, переустановка драйвера не нужна.
-   В ZIP сохранена прежняя исправленная DLL и патчи; она не изменена в 2.0 и не
+   В ZIP сохранена прежняя исправленная DLL и патчи; она не изменена в 2.5 и не
    устанавливается автоматически. При ручной замене DLL сначала закройте SteamVR.
    Для первой установки драйвера используйте инструкции проекта GlassVR.
 5. Телефон и ПК подключите к одной доступной локальной сети или точке доступа ПК.
@@ -61,14 +68,14 @@ thumbsticks, не trackpads; действия меню зависят от Steam
 
 ```text
 iPhone ultra-wide 640×480 / 30 FPS
-    → MediaPipe Hand Landmarker: 2 руки, handedness, 21 world landmarks
+    → Native Core ML / MediaPipe models: 2 руки, handedness, 21 world landmarks
     → fit camera translation + palm quaternion на iPhone
     → MPBR/v2 UDP, latest frame only, clock sync / heartbeat
 Windows: роли рук → HMD pose на момент кадра → фильтры → GlassVR → SteamVR
 Xbox 360 → отдельный input loop ────────────────────────┘
 ```
 
-MediaPipe работает в video mode на фоновой serial queue: занятый обработчик
+Нативный Core ML pipeline работает в video mode на фоновой serial queue: занятый обработчик
 пропускает кадр, очередь изображений не накапливается. Камера сохраняет native
 sensor orientation без зеркалирования и поворотов вслед за интерфейсом.
 При конфликте камеры VRidge получает приоритет; трекер приостанавливается.
@@ -100,8 +107,10 @@ pose + пять curls/пять splays и симулирует OpenVR skeleton. �
 всеми фалангами не заявляется. Реальные FPS, нагрев и задержка зависят от iPhone
 и одновременного стриминга VRidge; 30 FPS — целевой захват, а не гарантия inference.
 
-Пользователь подтвердил улучшение экспериментальной MediaPipe-версии. Это не
-заменяет отдельную аппаратную проверку финального пакета 2.0 после установки.
+Пользователь подтвердил улучшение Core ML preview на iPhone 16 / iOS 18.5. Это не
+заменяет отдельную аппаратную проверку финального пакета 2.5 после установки.
+
+Подробности backend и сравнения с upstream: [Core ML](docs/COREML_BACKEND.md).
 
 ## Исходники и сборка
 
@@ -113,11 +122,10 @@ py -3 -m venv .venv
 ```
 
 Windows EXE: `powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1`.
-На Mac: `bash ios/build.sh`. SDK MediaPipe 1.1.1 и модель float16/v1 скачиваются
-с проверкой pinned SHA256. Модель должна быть рядом с готовой dylib при упаковке.
+На Mac: `bash ios/build.sh`. Две Core ML модели и референс скачиваются с неизменяемого commit и SHA256. Две скомпилированные директории .mlmodelc должны лежать рядом с dylib при упаковке. Минимальная iOS — 16. MediaPipe Tasks SDK не используется.
 
 Для исходной decrypted IPA: `python -m scripts.package_ipa --ipa private/original.ipa
---dylib artifacts/ios/VRidgeHandTracking.dylib --output artifacts/iOS/VRidge-HandTracking-2.0-Unsigned.ipa`.
+--dylib artifacts/ios/VRidgeHandTracking.dylib --output artifacts/iOS/VRidge-HandTracking-2.5-Unsigned.ipa`.
 Для уже инжектированной IPA используйте `scripts.update_injected_ipa` с теми же
 аргументами: executable сохраняется побайтно. Подпись/profiles — отдельно;
 package_ipa поддерживает identity/profile/entitlements на macOS. Проприетарная

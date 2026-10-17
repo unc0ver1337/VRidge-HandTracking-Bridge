@@ -1,10 +1,12 @@
 """Update our dylib/settings in an already injected, unsigned IPA."""
 import argparse,plistlib,zipfile,struct,os
 from pathlib import Path
-from scripts.package_ipa import LOAD_PATH,mediapipe_info
+from scripts.package_ipa import LOAD_PATH,coreml_info,model_resources
 
 def update(ipa,dylib,settings,output):
     output=Path(output);temp=output.with_suffix('.ipa.tmp')
+    if Path(ipa).resolve()==output.resolve():raise ValueError('input IPA must be preserved')
+    output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(ipa) as source:
         names=source.namelist()
         plists=[n for n in names if n.startswith('Payload/') and n.count('/')==2 and n.endswith('/Info.plist')]
@@ -22,20 +24,24 @@ def update(ipa,dylib,settings,output):
             off+=length
         if loads.count(LOAD_PATH.encode())!=1:raise ValueError('our dylib must already be injected exactly once')
         replacements={root+'/Frameworks/VRidgeHandTracking.dylib':Path(dylib).read_bytes(),root+'/VHBridge.plist':Path(settings).read_bytes()}
-        replacements[root+'/hand_landmarker.task']=(Path(dylib).parent/'hand_landmarker.task').read_bytes()
-        mediapipe_info(info)
+        replacements.update({root+'/'+name:data for name,data in model_resources(Path(dylib).parent).items()})
+        coreml_info(info)
         replacements[plists[0]]=plistlib.dumps(info)
         if root+'/Frameworks/VRidgeHandTracking.dylib' not in names:raise ValueError('missing injected dylib')
         try:
             with zipfile.ZipFile(temp,'w',zipfile.ZIP_DEFLATED) as dest:
+                written=set()
                 for entry in source.infolist():
                     if '/_CodeSignature/' in entry.filename or entry.filename.endswith('/embedded.mobileprovision'):continue
-                    dest.writestr(entry,replacements.get(entry.filename,source.read(entry.filename)))
+                    if entry.filename==root+'/hand_landmarker.task' or entry.filename.startswith((root+'/hand_detector.mlmodelc/',root+'/hand_landmarks_detector.mlmodelc/')):continue
+                    dest.writestr(entry,replacements.get(entry.filename,source.read(entry.filename)));written.add(entry.filename)
                 for name,data in replacements.items():
-                    if name not in names:dest.writestr(name,data)
+                    if name not in written:dest.writestr(name,data)
             with zipfile.ZipFile(temp) as result:
                 if result.testzip() is not None:raise ValueError('corrupt output')
                 if result.read(root+'/'+info['CFBundleExecutable'])!=binary:raise ValueError('executable changed')
+                for name,data in replacements.items():
+                    if result.read(name)!=data:raise ValueError('resource mismatch: '+name)
         except BaseException:
             temp.unlink(missing_ok=True);raise
     os.replace(temp,output)

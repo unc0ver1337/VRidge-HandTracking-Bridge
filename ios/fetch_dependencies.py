@@ -1,19 +1,14 @@
-import hashlib,urllib.request,zipfile,io
+"""Fetch immutable upstream Core ML assets; no PyTorch/pickle loading."""
 from pathlib import Path
-root=Path(__file__).resolve().parent;deps=root/'deps';deps.mkdir(exist_ok=True);assets=root/'assets';assets.mkdir(exist_ok=True)
-items=[
-('MediaPipeTasksCommon','25690f3005c0405a7f27b6d273b4db241811d00fbb01c54004057ee1d0e983d8'),
-('MediaPipeTaskGraphs','e4d88ed65c101764ef90281a411b9942f369e48673d448eff1f934e1f68d9633'),
-('MediaPipeTasksVision','755390ce853b062536899f0729321156d4cdceb263aa92c4bf3b2dd05fe640e0')]
-for name,sha in items:
-    url='https://dl.google.com/cpdc/20261013-213039/'+name+'-1.1.1.xcframework.zip'
-    print('Downloading',name,flush=True);data=urllib.request.urlopen(url,timeout=180).read()
-    if hashlib.sha256(data).hexdigest()!=sha:raise ValueError('SDK checksum '+name)
-    with zipfile.ZipFile(io.BytesIO(data)) as z:
-        for n in z.namelist():
-            if not (deps/n).resolve().is_relative_to(deps.resolve()):raise ValueError('unsafe dependency path')
-        z.extractall(deps)
-url='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
-data=urllib.request.urlopen(url,timeout=180).read()
-if hashlib.sha256(data).hexdigest()!='fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1':raise ValueError('model checksum')
-(assets/'hand_landmarker.task').write_bytes(data)
+import hashlib,urllib.request,json
+ROOT=Path(__file__).resolve().parent
+COMMIT='565d18818104a315887c611c84125f382dfcf6aa'
+FILES=[('models/hand_detector.mlpackage/Manifest.json', 'c8334589fe08fc59fc75c741ca2ad46cb3bf9ab1a121c40933492f6a5abdf97c'), ('models/hand_detector.mlpackage/Data/com.apple.CoreML/model.mlmodel', 'd59f5ef0a0e9876dd5c3c29a9f9a79b5e69b4bccc268e565a678ebb601b8e40d'), ('models/hand_detector.mlpackage/Data/com.apple.CoreML/weights/weight.bin', '5bda5212ad6cfcb8d19c95c4589564e6eaf241627c7aed95bf0b4a3ddbd06943'), ('models/hand_landmarks_detector.mlpackage/Manifest.json', 'ce2d0e77dd317f6534d20fceeadbb1d5a9dd396fdb3c3a8ba178693a9132a803'), ('models/hand_landmarks_detector.mlpackage/Data/com.apple.CoreML/model.mlmodel', '9bec43dfa3555c74ff85d189e5ec42b70adb8ff3b364ebca22917e9009d25d33'), ('models/hand_landmarks_detector.mlpackage/Data/com.apple.CoreML/weights/weight.bin', '0649c8a900c3cfb630d5c8b94b137969c1221a4141f1016d0f2999807ab76428'), ('src/fasthands/pipeline.py', 'f308b793a6d52b6e41946849e2a35f5d5582b0bac4f413db057e946ba35ca38b'), ('LICENSE', '4534b881ba47ec03d8cff3838078e6665a41c875792a33666741b18c361ab9ce'), ('test_images/armandhand.JPG', '37086da2ab449fc6e1803d44beb80197a3fc1c53ca836bded51aa6a732cab22e')]
+for name,sha in FILES:
+    if name.startswith('models/'):dest=ROOT/'assets'/name.removeprefix('models/')
+    else:dest=ROOT/'assets/reference'/Path(name).name
+    dest.parent.mkdir(parents=True,exist_ok=True)
+    if not dest.exists() or hashlib.sha256(dest.read_bytes()).hexdigest()!=sha:
+        dest.write_bytes(urllib.request.urlopen('https://raw.githubusercontent.com/VimalMollyn/Mediapipe-Hands-PyTorch-CoreML/'+COMMIT+'/'+name,timeout=90).read())
+    if hashlib.sha256(dest.read_bytes()).hexdigest()!=sha:raise ValueError('Core ML asset checksum '+name)
+print(json.dumps({'upstream_commit':COMMIT,'verified_files':len(FILES)}))

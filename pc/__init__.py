@@ -1,1 +1,1 @@
-"""Windows iPhone to GlassVR bridge."""
+__version__ = "2.5.0"

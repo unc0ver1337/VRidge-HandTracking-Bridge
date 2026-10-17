@@ -1,7 +1,7 @@
 #import "Tracker.h"
 #import "../Network/Wire.h"
 #import <AVFoundation/AVFoundation.h>
-#import <MediaPipeTasksVision/MediaPipeTasksVision.h>
+#import "CoreMLTracker.h"
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
 #import <simd/simd.h>
@@ -13,7 +13,7 @@
 @implementation VHTracker {
     AVCaptureSession *_session; AVCaptureDevice *_camera;
     dispatch_queue_t _captureQueue; dispatch_queue_t _inferenceQueue;
-    MPPHandLandmarker *_request; NSInteger _lastTimestamp; CIContext *_context;
+    VHCoreMLTracker *_request; CIContext *_context;
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence;
     CVPixelBufferPoolRef _pool; int _width,_height;
@@ -26,12 +26,8 @@
         _busy=false; _wanted=false; _pool=nullptr; _width=640; _height=480;
         dispatch_async(_inferenceQueue,^{
         NSError *modelError=nil;
-        MPPHandLandmarkerOptions *options=[MPPHandLandmarkerOptions new];
-        options.baseOptions.modelAssetPath=[[NSBundle mainBundle] pathForResource:@"hand_landmarker" ofType:@"task"];
-        options.runningMode=MPPRunningModeVideo;options.numHands=2;
-        options.minHandDetectionConfidence=.5;options.minHandPresenceConfidence=.5;options.minTrackingConfidence=.5;
-        self->_request=[[MPPHandLandmarker alloc] initWithOptions:options error:&modelError];
-        if(!self->_request)NSLog(@"MediaPipe model unavailable: %@",modelError);
+        self->_request=[[VHCoreMLTracker alloc] initWithBundle:NSBundle.mainBundle error:&modelError];
+        if(!self->_request)NSLog(@"Core ML model unavailable: %@",modelError);
         });
         _context=[CIContext contextWithOptions:@{kCIContextCacheIntermediates:@NO}];
         _hostSessions=[NSHashTable weakObjectsHashTable];
@@ -108,7 +104,7 @@
     // Only this tweak's own session. Existing host capture sessions are observed,
     // never stopped, swizzled, or reconfigured.
     [_session stopRunning]; _session=nil; _camera=nil;
-    dispatch_sync(_inferenceQueue,^{});
+    dispatch_sync(_inferenceQueue,^{[self->_request reset];});
     if(_pool){CVPixelBufferPoolRelease(_pool);_pool=nullptr;}
 }
 - (void)hostStarted:(NSNotification *)n {
@@ -158,7 +154,7 @@
     VHHeader header={}; memcpy(header.magic,"MPBR",4);header.version=2;header.sequence=_sequence++; header.width=_width;header.height=_height;
     // Convert sample time from capture session clock into host clock used by sync.
     CMTime pts=CMSampleBufferGetPresentationTimeStamp(sample);
-    CMClockRef clock=_session.masterClock;
+    CMClockRef clock=_session.synchronizationClock;
     header.capture=CMTimeGetSeconds(clock?CMSyncConvertTime(pts,clock,CMClockGetHostTimeClock()):pts);
     CFTypeRef attachment=CMGetAttachment(sample,kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix,nullptr);
     if(attachment&&CFGetTypeID(attachment)==CFDataGetTypeID()&&CFDataGetLength((CFDataRef)attachment)>=(CFIndex)sizeof(matrix_float3x3)){
@@ -171,24 +167,18 @@
     }
     dispatch_async(_inferenceQueue,^{ @autoreleasepool {
         NSError *error=nil;
-        MPPImage *image=[[MPPImage alloc] initWithPixelBuffer:scaled error:&error];
+        if(!self->_request){CVPixelBufferRelease(scaled);self->_busy=false;return;}
+        auto result=[self->_request process:scaled capture:header.capture error:&error];
         CVPixelBufferRelease(scaled);
-        NSInteger stamp=MAX(self->_lastTimestamp+1,(NSInteger)(header.capture*1000));self->_lastTimestamp=stamp;
-        MPPHandLandmarkerResult *result=image?[self->_request detectVideoFrame:image timestampInMilliseconds:stamp error:&error]:nil;
-        if(result){
+        if(!error){
             VHHeader h=header;NSMutableData *body=[NSMutableData data];
-            for(NSUInteger i=0;i<MIN((NSUInteger)2,result.landmarks.count);i++){
-                if(i>=result.worldLandmarks.count||result.landmarks[i].count!=21||result.worldLandmarks[i].count!=21)continue;
-                VHHand hand={};
-                MPPCategory *category=(i<result.handedness.count)?result.handedness[i].firstObject:nil;
-                hand.side=[category.categoryName isEqualToString:@"Left"]?1:[category.categoryName isEqualToString:@"Right"]?2:0;
-                hand.identity=(uint32_t)(i+1);
+            for(NSUInteger i=0;i<MIN((NSUInteger)2,result.size());i++){
+                const auto& observation=result[i];VHHand hand={};hand.side=observation.side;hand.identity=(uint32_t)(i+1);
                 bool finite=true;
                 for(NSUInteger j=0;j<21;j++){
-                    MPPNormalizedLandmark *p=result.landmarks[i][j];MPPLandmark *w=result.worldLandmarks[i][j];
+                    const auto&p=observation.landmarks[j];const auto&w=observation.world[j];
                     finite=finite&&isfinite(p.x)&&isfinite(p.y)&&isfinite(w.x)&&isfinite(w.y)&&isfinite(w.z);
-                    hand.landmarks[j][0]=fmax(0,fmin(1,p.x));hand.landmarks[j][1]=fmax(0,fmin(1,p.y));
-                    hand.landmarks[j][2]=1; // Availability, NOT a measured per-joint confidence.
+                    hand.landmarks[j][0]=fmax(0,fmin(1,p.x));hand.landmarks[j][1]=fmax(0,fmin(1,p.y));hand.landmarks[j][2]=1;
                     hand.world[j][0]=w.x;hand.world[j][1]=w.y;hand.world[j][2]=w.z;
                 }
                 if(!finite)continue;
@@ -218,7 +208,7 @@
                 [body appendBytes:&hand length:sizeof(hand)];h.count++;
             }
             NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];[data appendData:body];if(self.frame)self.frame(data);
-        }else NSLog(@"MediaPipe frame error: %@",error);
+        }else NSLog(@"Core ML frame error: %@",error);
         self->_busy=false;
     }});
 }

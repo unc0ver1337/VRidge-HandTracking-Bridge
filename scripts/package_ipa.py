@@ -8,13 +8,23 @@ from pathlib import Path
 
 LOAD_PATH='@executable_path/Frameworks/VRidgeHandTracking.dylib'
 
-def mediapipe_info(info):
-    info['CFBundleDisplayName']='VRidge Hand Tracking'
-    info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands with MediaPipe while VRidge streams VR.'
+def coreml_info(info):
+    info['CFBundleDisplayName']='VRidge Hand Tracking 2.5'
+    info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands with Core ML while VRidge streams VR.'
     info['NSLocalNetworkUsageDescription']='Find the GlassVR iPhone Bridge and stream hand tracking.'
     info['NSBonjourServices']=sorted((set(info.get('NSBonjourServices',[]))-{'_vhbridge._udp'})|{'_mpbridge._udp'})
-    if int(str(info.get('MinimumOSVersion','0')).split('.')[0])<15:info['MinimumOSVersion']='15.0'
+    if int(str(info.get('MinimumOSVersion','0')).split('.')[0])<16:info['MinimumOSVersion']='16.0'
     return info
+
+def model_resources(build):
+    build=Path(build);resources={}
+    for name in ('hand_detector','hand_landmarks_detector'):
+        model=build/(name+'.mlmodelc')
+        if not (model/'coremldata.bin').is_file():raise ValueError('missing compiled model '+name)
+        for path in model.rglob('*'):
+            if path.is_symlink() or not path.resolve().is_relative_to(build.resolve()):raise ValueError('unsafe model path')
+            if path.is_file():resources[path.relative_to(build).as_posix()]=path.read_bytes()
+    return resources
 
 def inject(data):
     b=bytearray(data)
@@ -49,6 +59,7 @@ def inject(data):
     return bytes(b)
 
 def package(ipa,dylib,output,settings,identity=None,profile=None,entitlements=None):
+    if Path(ipa).resolve()==Path(output).resolve(): raise ValueError('input IPA must be preserved')
     if identity and (sys.platform!='darwin' or not profile or not entitlements): raise ValueError('signing requires macOS, identity, provisioning profile and matching entitlements')
     with tempfile.TemporaryDirectory(prefix='vh-private-') as temp:
         root=Path(temp)
@@ -64,8 +75,10 @@ def package(ipa,dylib,output,settings,identity=None,profile=None,entitlements=No
         binary.write_bytes(inject(binary.read_bytes())); binary.chmod(0o755)
         frameworks=app/'Frameworks'; frameworks.mkdir(exist_ok=True)
         shutil.copy2(dylib,frameworks/'VRidgeHandTracking.dylib'); shutil.copy2(settings,app/'VHBridge.plist')
-        shutil.copy2(Path(dylib).parent/'hand_landmarker.task',app/'hand_landmarker.task')
-        mediapipe_info(info)
+        (app/'hand_landmarker.task').unlink(missing_ok=True)
+        for name,data in model_resources(Path(dylib).parent).items():
+            target=app/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+        coreml_info(info)
         plist.write_bytes(plistlib.dumps(info))
         for signature in app.rglob('_CodeSignature'):
             if signature.is_dir(): shutil.rmtree(signature)

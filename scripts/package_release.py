@@ -10,15 +10,18 @@ def package(ipa,windows,ios,output,commit,ci_run):
     if not (windows/'VRidgeHandBridge.exe').is_file():raise ValueError('missing Windows EXE')
     library=(ios/'VRidgeHandTracking.dylib').read_bytes()
     if struct.unpack_from('<II',library)!=(0xfeedfacf,0x100000c):raise ValueError('requires ARM64 Mach-O dylib')
-    model=(ios/'hand_landmarker.task').read_bytes()
-    if hashlib.sha256(model).hexdigest()!='fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1':raise ValueError('unexpected model')
+    from scripts.package_ipa import model_resources
+    models=model_resources(ios)
+    version=(ROOT/'VERSION').read_text().strip()
     with zipfile.ZipFile(ipa) as archive:
         if archive.testzip():raise ValueError('corrupt IPA')
         name=next(n for n in archive.namelist() if n.startswith('Payload/') and n.count('/')==2 and n.endswith('/Info.plist'))
         root=name.rsplit('/',1)[0];info=plistlib.loads(archive.read(name))
-        if not info['CFBundleIdentifier'].startswith(BUNDLE_PREFIX) or '.mediapipe.experimental' in info['CFBundleIdentifier']:raise ValueError('unexpected VRidge bundle ID')
+        if not info['CFBundleIdentifier'].startswith(BUNDLE_PREFIX) or any(x in info['CFBundleIdentifier'] for x in ('.mediapipe.experimental','.coreml.preview')):raise ValueError('unexpected VRidge bundle ID')
         if archive.read(root+'/Frameworks/VRidgeHandTracking.dylib')!=library:raise ValueError('IPA/dylib mismatch')
-        if archive.read(root+'/hand_landmarker.task')!=model:raise ValueError('IPA/model mismatch')
+        for path,data in models.items():
+            if archive.read(root+'/'+path)!=data:raise ValueError('IPA/model mismatch: '+path)
+        if root+'/hand_landmarker.task' in archive.namelist():raise ValueError('legacy model remained')
         if any('/_CodeSignature/' in n or n.endswith('/embedded.mobileprovision') for n in archive.namelist()):raise ValueError('bundle is expected to be unsigned')
     files={}
     for path in windows.rglob('*'):
@@ -26,19 +29,20 @@ def package(ipa,windows,ios,output,commit,ci_run):
     files['Windows/config.yaml']=(ROOT/'pc/config.yaml').read_bytes()
     files['Windows/Start-Bridge.cmd']=b'@echo off\r\ncd /d "%~dp0"\r\nVRidgeHandBridge.exe --config config.yaml\r\npause\r\n'
     files['Windows/Allow-Local-Network.ps1']=(ROOT/'scripts/allow_local_network.ps1').read_bytes()
-    files['iOS/VRidge-HandTracking-2.0-Unsigned.ipa']=ipa.read_bytes()
-    for name in ('VRidgeHandTracking.dylib','hand_landmarker.task','load-commands.txt'):
+    files['iOS/VRidge-HandTracking-2.5-Unsigned.ipa']=ipa.read_bytes()
+    for name in ('VRidgeHandTracking.dylib','load-commands.txt','coreml-parity.json'):
         files['iOS/library/'+name]=(ios/name).read_bytes()
+    files.update({'iOS/library/'+name:data for name,data in models.items()})
     files['GlassVR/driver_glassvr.dll']=(ROOT/'artifacts/driver_glassvr-visibility-fix.dll').read_bytes()
     for path in (ROOT/'patches').glob('*.patch'):files['GlassVR/patches/'+path.name]=path.read_bytes()
     for path in (ROOT/'docs').glob('*.md'):files['docs/'+path.name]=path.read_bytes()
-    for name in ('README.md','THIRD_PARTY.md','LICENSE','VERSION','docs/VALIDATION.md','third_party/MediaPipe-LICENSE.txt'):
+    for name in ('README.md','THIRD_PARTY.md','LICENSE','VERSION','docs/VALIDATION.md','third_party/MediaPipe-LICENSE.txt','third_party/FastHands-LICENSE.txt'):
         files[name]=(ROOT/name).read_bytes()
     for name in subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0'):
         if not name:continue
         if Path(name).suffix.lower() in ('.ipa','.p12','.mobileprovision','.key','.exe','.dll','.dylib','.zip'):raise ValueError('private binary in git index')
         files['Source/'+name]=(ROOT/name).read_bytes()
-    files['BUILD.json']=json.dumps({'project':'VRidge Hand Tracking Bridge','version':'2.0.0','source_commit':commit,'ci_run':ci_run,'ipa_signed':False,'device_verified':False,'bundle_id':info['CFBundleIdentifier'],'network':'MPBR/v2 UDP39580','hardware_runtime_started_during_build':False},indent=2).encode()
+    files['BUILD.json']=json.dumps({'project':'VRidge Hand Tracking Bridge','version':version,'backend':'native Core ML fasthands stock fp16','source_commit':commit,'ci_run':ci_run,'ipa_signed':False,'device_verified':False,'bundle_id':info['CFBundleIdentifier'],'network':'MPBR/v2 UDP39580','hardware_runtime_started_during_build':False},indent=2).encode()
     files['SHA256SUMS.txt']=''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(files.items())).encode()
     output.parent.mkdir(exist_ok=True,parents=True)
     temp=output.with_suffix('.zip.tmp')
