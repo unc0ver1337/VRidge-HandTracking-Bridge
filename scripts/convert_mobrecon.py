@@ -31,6 +31,11 @@ def main():
     if 'model_state_dict' in state:state=state['model_state_dict']
     model.load_state_dict(state,strict=True)
     model.requires_grad_(False)
+    # Core ML clip expects floating bounds for floating activations. Casting
+    # these exact integers to float changes no values or trained weights.
+    for block in model.modules():
+        if isinstance(block,torch.nn.Hardtanh):
+            block.min_val=float(block.min_val);block.max_val=float(block.max_val)
     samples=[]
     for p in sorted((ROOT/'tests/images').glob('*.jpg')):
         rgb=cv2.cvtColor(cv2.imread(str(p)),cv2.COLOR_BGR2RGB)

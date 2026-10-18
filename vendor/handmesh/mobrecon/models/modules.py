@@ -206,7 +206,7 @@ class Reg2DDecode3D(nn.Module):
         return samples[:, :, :, 0]  # [B, C, N]
 
     def forward(self, uv, x):
-        uv = torch.clamp((uv - 0.5) * 2, -1, 1)
+        uv = torch.clamp((uv - 0.5) * 2, -1.0, 1.0)
         # x = self.de_layer_conv(x)
         x = self.index(x, uv).permute(0, 2, 1)
         x = torch.bmm(self.upsample.repeat(x.size(0), 1, 1).to(x.device), x)
