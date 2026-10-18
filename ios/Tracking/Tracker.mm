@@ -22,7 +22,7 @@
     struct FingerSample {corehands::Hand hand;double capture;corehands::Point wrist;};
     std::mutex _fingerMutex;std::map<int,FingerSample> _fingers;
     struct Track {corehands::Point wrist;double capture;int side;};
-    std::map<uint32_t,Track> _tracks;uint32_t _nextTrack=1;
+    std::map<uint32_t,Track> _tracks;uint32_t _nextTrack;
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence;
     CVPixelBufferPoolRef _pool; int _width,_height;
@@ -34,7 +34,7 @@
         _settings=settings; _captureQueue=dispatch_queue_create("vh.capture",DISPATCH_QUEUE_SERIAL); _inferenceQueue=dispatch_queue_create("vh.mediapipe",DISPATCH_QUEUE_SERIAL);
         _fingerQueue=dispatch_queue_create("vh.fingers",DISPATCH_QUEUE_SERIAL);
         _vision=[VNDetectHumanHandPoseRequest new];_vision.maximumHandCount=2;
-        _fingerBusy=false;_lastFinger=0;
+        _fingerBusy=false;_lastFinger=0;_nextTrack=1;
         _busy=false; _wanted=false; _pool=nullptr; _width=640; _height=480;
         dispatch_async(_fingerQueue,^{
         NSError *modelError=nil;
