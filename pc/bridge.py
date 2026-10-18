@@ -1,5 +1,5 @@
 """Run: python -m pc.bridge --config pc/config.yaml"""
-import argparse,logging,time,json,os
+import argparse,logging,time,json,os,sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import numpy as np
@@ -17,7 +17,8 @@ from .glassvr.visibility import DevicePresence
 from .glassvr.install import DriverManager
 
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument('--version',action='version',version='VRidge Hand Tracking Bridge '+__version__); parser.add_argument('--config',default='pc/config.yaml'); parser.add_argument('--log',default='bridge.log');parser.add_argument('--duration',type=float,default=0,help='Optional diagnostic runtime in seconds'); parser.add_argument('--uninstall-driver',action='store_true'); args=parser.parse_args()
+    default_config=str(Path(sys.executable).parent/'config.yaml') if getattr(sys,'frozen',False) else 'pc/config.yaml'
+    parser=argparse.ArgumentParser(); parser.add_argument('--version',action='version',version='VRidge Hand Tracking Bridge '+__version__); parser.add_argument('--config',default=default_config); parser.add_argument('--log',default='bridge.log');parser.add_argument('--duration',type=float,default=0,help='Optional diagnostic runtime in seconds'); parser.add_argument('--uninstall-driver',action='store_true'); args=parser.parse_args()
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(name)s %(message)s',handlers=[logging.StreamHandler(),RotatingFileHandler(args.log,maxBytes=8*1024*1024,backupCount=3,encoding='utf8')])
     log=logging.getLogger('bridge')
     driver=DriverManager()
@@ -77,7 +78,7 @@ def main():
                         if time.monotonic()-capture_pc>.2:raise ValueError('output exceeded pose freshness budget')
                         glass.send(side,p,q,{},pose.angles,include_input=False,sample_time=capture_pc,finger_valid=pose.finger_valid); inputs.tracked(side,time.monotonic())
                         solved_ms.append(pose.solve_ms)
-                        quality[side]={'orientation_held':pose.orientation_held,'palm_reprojection_px':round(pose.palm_rmse,2),'valid_fingers':int(np.count_nonzero(pose.finger_valid)),'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
+                        quality[side]={'orientation_held':pose.orientation_held,'palm_reprojection_px':round(pose.palm_rmse,2),'valid_fingers':int(np.count_nonzero(pose.finger_valid)),'finger_age_ms':round((f.capture-hand.finger_capture)*1000,1) if hand.finger_capture else None,'reprojection_px':round(pose.pixel_rmse,2),'depth_sigma_m':round(pose.depth_sigma_m,3),'palm':pose.palm_facing,'orientation_ambiguous':pose.orientation_ambiguous}
                     except ValueError as error:
                         message=str(error);reasons[message]=reasons.get(message,0)+1
                     except Exception: log.exception('isolated hand processing failure')
