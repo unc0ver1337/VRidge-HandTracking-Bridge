@@ -73,6 +73,15 @@ def test_old_body_centering_is_not_loaded_as_tip_centering(tmp_path):
     space=Space(config(),path)
     assert not space.centered_sides
 
+def test_runtime_tip_reload_does_not_change_uncalibrated_hand_default(tmp_path):
+    space=Space(config(),tmp_path/'center.json');space.static=True
+    space.update_aim({1:Rotation.from_euler('xyz',[-.6,-.1,.07]),2:Rotation.from_euler('xyz',[-.7,.1,-.04])})
+    left=space.grip[1].as_matrix().copy()
+    space.center_orientation([0,0,0,1],10,2);space.save_centering()
+    loaded=Space(config(),space.calibration_path)
+    assert loaded.centered_sides=={2}
+    np.testing.assert_allclose(loaded.grip[1].as_matrix(),left,atol=1e-12)
+
 def test_runtime_tip_reads_tracking_to_component_local_without_starting_openvr():
     from pc.glassvr.aim import runtime_tips
     from types import SimpleNamespace

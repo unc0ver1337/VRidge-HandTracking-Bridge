@@ -29,15 +29,16 @@ class Space:
         try:
             data=json.loads(self.calibration_path.read_text(encoding='utf8'))
             if data.get('format')!=2 or data.get('target')!='index-tip-hmd-forward' or data.get('backend')!='VisionHybrid' or data.get('quaternion_order')!='xyzw':raise ValueError('old or unsupported centering file; hold Back+Start to recalibrate')
+            observed=set(data.get('measured_sides',[]))
+            if not observed<={1,2}:raise ValueError('invalid measured sides')
             loaded={}
             for side,name in ((1,'left'),(2,'right')):
                 q=np.asarray(data['hands'][name],float)
                 if q.shape!=(4,) or not np.isfinite(q).all() or np.linalg.norm(q)<1e-8:raise ValueError('invalid centering quaternion')
                 tip=np.asarray(data['aim_local_xyzw'][name],float)
                 if tip.shape!=(4,) or not np.isfinite(tip).all() or np.linalg.norm(tip)<1e-8:raise ValueError('invalid saved aim quaternion')
-                loaded[side]=Rotation.from_quat(q)*Rotation.from_quat(tip)*self.aim_tip[side].inv()
-            observed=set(data.get('measured_sides',[]))
-            if not observed<={1,2}:raise ValueError('invalid measured sides')
+                loaded[side]=Rotation.from_quat(q)
+                if side in observed:loaded[side]=loaded[side]*Rotation.from_quat(tip)*self.aim_tip[side].inv()
             self.grip=loaded;self.centered_sides=observed
             logging.getLogger(__name__).info('Loaded VisionHybrid centering: %s',self.calibration_path)
         except (OSError,ValueError,KeyError,TypeError):logging.getLogger(__name__).exception('Ignoring invalid VisionHybrid centering; keeping defaults')
@@ -55,9 +56,10 @@ class Space:
         self.centered_sides.add(side);self.center_dirty=True
     def save_centering(self):
         if not self.center_dirty:return False
-        data={'format':2,'target':'index-tip-hmd-forward','backend':'VisionHybrid','quaternion_order':'xyzw','measured_sides':sorted(self.centered_sides),
-              'aim_local_xyzw':{name:self.aim_tip[side].as_quat().tolist() for side,name in ((1,'left'),(2,'right'))},
-              'hands':{name:self.grip[side].as_quat().tolist() for side,name in ((1,'left'),(2,'right'))}}
+        with self.lock:
+            data={'format':2,'target':'index-tip-hmd-forward','backend':'VisionHybrid','quaternion_order':'xyzw','measured_sides':sorted(self.centered_sides),
+                  'aim_local_xyzw':{name:self.aim_tip[side].as_quat().tolist() for side,name in ((1,'left'),(2,'right'))},
+                  'hands':{name:self.grip[side].as_quat().tolist() for side,name in ((1,'left'),(2,'right'))}}
         if self.calibration_path:
             temporary=self.calibration_path.with_name(self.calibration_path.name+'.tmp')
             try:
