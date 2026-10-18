@@ -68,7 +68,7 @@ def main():
                         pose=decoder.decode(hand,side,f)
                         if time.monotonic()-capture_pc>.2:raise ValueError('output exceeded pose freshness budget')
                         # Transform using head pose at CAPTURE, filter in WORLD coordinates.
-                        centering=space.center_holding and not pose.orientation_held
+                        centering=space.center_holding
                         if centering:space.center_orientation(pose.quaternion,capture_pc,side)
                         p,q=space.transform(pose.position,pose.quaternion,capture_pc,side)
                         if centering:filters[side].reset_rotation(q)

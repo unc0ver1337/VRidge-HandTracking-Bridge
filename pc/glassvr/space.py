@@ -4,6 +4,7 @@ from collections import deque
 import numpy as np
 from scipy.spatial.transform import Rotation
 from .grip import DEFAULT_GRIP_XYZW
+from .aim import stock_tips,runtime_tips
 
 class Space:
     """Timestamped HMD history + measured rigid camera mount. SteamVR metres.
@@ -19,6 +20,7 @@ class Space:
         self.offset=np.asarray(config['camera_offset_m'],float); self.static=config['mode']=='static'
         self.origin=np.array(config.get('static_origin_m',[0,1.6,0]),float)
         self.grip={side:Rotation.from_quat(q) for side,q in DEFAULT_GRIP_XYZW.items()}
+        self.aim_tip=stock_tips()
         self.calibration_path=Path(calibration_path) if calibration_path else None
         self.centered_sides=set();self.center_dirty=False;self.center_holding=False
         self.load_centering()
@@ -26,12 +28,14 @@ class Space:
         if not self.calibration_path or not self.calibration_path.exists():return
         try:
             data=json.loads(self.calibration_path.read_text(encoding='utf8'))
-            if data.get('format')!=1 or data.get('backend')!='VisionHybrid' or data.get('quaternion_order')!='xyzw':raise ValueError('unsupported centering file')
+            if data.get('format')!=2 or data.get('target')!='index-tip-hmd-forward' or data.get('backend')!='VisionHybrid' or data.get('quaternion_order')!='xyzw':raise ValueError('old or unsupported centering file; hold Back+Start to recalibrate')
             loaded={}
             for side,name in ((1,'left'),(2,'right')):
                 q=np.asarray(data['hands'][name],float)
                 if q.shape!=(4,) or not np.isfinite(q).all() or np.linalg.norm(q)<1e-8:raise ValueError('invalid centering quaternion')
-                loaded[side]=Rotation.from_quat(q)
+                tip=np.asarray(data['aim_local_xyzw'][name],float)
+                if tip.shape!=(4,) or not np.isfinite(tip).all() or np.linalg.norm(tip)<1e-8:raise ValueError('invalid saved aim quaternion')
+                loaded[side]=Rotation.from_quat(q)*Rotation.from_quat(tip)*self.aim_tip[side].inv()
             observed=set(data.get('measured_sides',[]))
             if not observed<={1,2}:raise ValueError('invalid measured sides')
             self.grip=loaded;self.centered_sides=observed
@@ -43,11 +47,16 @@ class Space:
         if hand.shape!=(4,) or not np.isfinite(hand).all() or np.linalg.norm(hand)<1e-8:raise ValueError('invalid hand orientation')
         r,_=self.pose_at(t)
         base=Rotation.from_matrix(r@self.mount)*Rotation.from_quat(hand)*Rotation.from_euler('x',90,degrees=True)
-        self.grip[side]=base.inv()*Rotation.from_matrix(r)
+        # Match the actual INDEX TIP frame to the HMD, not the controller body.
+        # (body_world * tip_local) must equal head_world; forward is -Z.
+        with self.lock:
+            tip=self.aim_tip[side]
+            self.grip[side]=base.inv()*Rotation.from_matrix(r)*tip.inv()
         self.centered_sides.add(side);self.center_dirty=True
     def save_centering(self):
         if not self.center_dirty:return False
-        data={'format':1,'backend':'VisionHybrid','quaternion_order':'xyzw','measured_sides':sorted(self.centered_sides),
+        data={'format':2,'target':'index-tip-hmd-forward','backend':'VisionHybrid','quaternion_order':'xyzw','measured_sides':sorted(self.centered_sides),
+              'aim_local_xyzw':{name:self.aim_tip[side].as_quat().tolist() for side,name in ((1,'left'),(2,'right'))},
               'hands':{name:self.grip[side].as_quat().tolist() for side,name in ((1,'left'),(2,'right'))}}
         if self.calibration_path:
             temporary=self.calibration_path.with_name(self.calibration_path.name+'.tmp')
@@ -62,13 +71,25 @@ class Space:
     def start(self):
         if not self.static:
             self.thread=threading.Thread(target=self.poll,name='openvr',daemon=True); self.thread.start()
+    def update_aim(self,tips):
+        with self.lock:
+            for side,tip in tips.items():
+                if side not in (1,2):continue
+                if (self.aim_tip[side]*tip.inv()).magnitude()<1e-8:continue
+                if side in self.centered_sides:
+                    self.grip[side]=self.grip[side]*self.aim_tip[side]*tip.inv()
+                self.aim_tip[side]=tip
     def poll(self):
         import openvr
-        initialized=False
+        initialized=False;aim_checked=0
         while not self.stop.is_set():
             try:
                 if not initialized:
-                    openvr.init(openvr.VRApplication_Background); initialized=True
+                    openvr.init(openvr.VRApplication_Background); initialized=True;aim_checked=0
+                if time.monotonic()-aim_checked>5:
+                    try:self.update_aim(runtime_tips(openvr))
+                    except Exception as error:logging.getLogger(__name__).debug('Index tip metadata unavailable; using last known component: %s',error)
+                    aim_checked=time.monotonic()
                 poses=openvr.VRSystem().getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseRawAndUncalibrated,0,openvr.k_unMaxTrackedDeviceCount)
                 hmd=poses[openvr.k_unTrackedDeviceIndex_Hmd]
                 if hmd.bPoseIsValid and hmd.bDeviceIsConnected:

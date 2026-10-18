@@ -21,7 +21,9 @@ def test_center_both_hands_matches_hmd_and_preserves_positions(tmp_path):
             space.center_orientation(hand.as_quat(),t,side)
             after,q=space.transform(hand_position,hand.as_quat(),t,side)
             np.testing.assert_allclose(before,after,atol=1e-12)
-            np.testing.assert_allclose(Rotation.from_quat(q).as_matrix(),head.as_matrix(),atol=1e-12)
+            aim=Rotation.from_quat(q)*space.aim_tip[side]
+            np.testing.assert_allclose(aim.as_matrix(),head.as_matrix(),atol=1e-12)
+            np.testing.assert_allclose(aim.apply([0,0,-1]),head.apply([0,0,-1]),atol=1e-12)
     assert not path.exists() # No disk writes on every camera frame.
     assert space.save_centering() and not space.save_centering()
     data=json.loads(path.read_text());assert data['measured_sides']==[1,2]
@@ -49,6 +51,41 @@ def test_disconnect_releases_centering_and_consumed_system_buttons():
     assert m.update(Input(True,{'start','back'}))[1]==['center_start']
     assert m.update(Input())[1]==['center_stop']
     assert m.update(Input(True,{'back'}))[0][1]['system']
+
+def test_runtime_tip_metadata_and_saved_calibration_preserve_actual_forward_ray(tmp_path):
+    path=tmp_path/'center.json';space=Space(config(),path);space.static=True
+    custom={1:Rotation.from_euler('xyz',[-.6,-.12,.04]),2:Rotation.from_euler('xyz',[-.75,.09,-.03])}
+    palm=Rotation.from_euler('xyz',[.7,-1.2,.4]).as_quat()
+    for side in (1,2):space.center_orientation(palm,10,side)
+    space.update_aim(custom)
+    for side in (1,2):
+        _,q=space.transform(np.array([.1,0,.5]),palm,10,side)
+        np.testing.assert_allclose((Rotation.from_quat(q)*custom[side]).as_matrix(),np.eye(3),atol=1e-12)
+    space.save_centering();loaded=Space(config(),path);loaded.static=True
+    for side in (1,2):
+        _,q=loaded.transform(np.array([.1,0,.5]),palm,10,side)
+        np.testing.assert_allclose((Rotation.from_quat(q)*loaded.aim_tip[side]).apply([0,0,-1]),[0,0,-1],atol=1e-12)
+    loaded.update_aim(custom)
+    for side in (1,2):np.testing.assert_allclose(loaded.grip[side].as_matrix(),space.grip[side].as_matrix(),atol=1e-12)
+
+def test_old_body_centering_is_not_loaded_as_tip_centering(tmp_path):
+    path=tmp_path/'center.json';path.write_text(json.dumps({'format':1,'backend':'VisionHybrid','quaternion_order':'xyzw','hands':{'left':[0,0,0,1],'right':[0,0,0,1]}}))
+    space=Space(config(),path)
+    assert not space.centered_sides
+
+def test_runtime_tip_reads_tracking_to_component_local_without_starting_openvr():
+    from pc.glassvr.aim import runtime_tips
+    from types import SimpleNamespace
+    expected=Rotation.from_euler('xyz',[-.7,.08,.02])
+    matrix=np.column_stack((expected.as_matrix(),[.006,-.015,.02]))
+    class Models:
+        def getComponentState(self,name,component,controller,mode):
+            assert component=='tip' and name.startswith('{indexcontroller}')
+            return True,SimpleNamespace(mTrackingToComponentLocal=SimpleNamespace(m=matrix))
+    fake=SimpleNamespace(VRRenderModels=Models,VRControllerState_t=object,RenderModel_ControllerMode_State_t=object)
+    values=runtime_tips(fake)
+    assert set(values)=={1,2}
+    for value in values.values():np.testing.assert_allclose(value.as_matrix(),expected.as_matrix(),atol=1e-12)
 
 def test_rotation_reset_preserves_filter_position_and_velocity():
     f=PoseFilter();f.update([0,0,1],[0,0,0,1],1);f.update([.01,0,1],[0,0,0,1],1.03)
