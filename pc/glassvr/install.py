@@ -66,6 +66,8 @@ class DriverManager:
         if not self.valid(self.bundled): raise RuntimeError('Bundled GlassVR driver missing or incomplete; extract the ENTIRE release ZIP.')
         tool = self.tool() # Fail before closing any application if SteamVR is absent.
         self.shutdown_steam()
+        # SteamVR may persist its old settings during shutdown; reapply afterwards.
+        self.configure_multiple_drivers()
         self.managed.parent.mkdir(parents=True,exist_ok=True)
         staging = self.managed.with_name(self.managed.name+'.installing')
         # Fixed sibling inside the managed driver directory, never a user argument.
