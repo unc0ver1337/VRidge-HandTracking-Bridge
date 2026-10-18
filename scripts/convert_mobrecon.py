@@ -73,7 +73,7 @@ def main():
     ml=ct.convert(traced,inputs=[ct.TensorType(name='image',shape=(1,3,128,128),dtype=np.float32)],
                   outputs=[ct.TensorType(name='joints',dtype=np.float32),ct.TensorType(name='landmarks2d',dtype=np.float32)],
                   minimum_deployment_target=ct.target.iOS16,convert_to='mlprogram',
-                  compute_precision=ct.precision.FLOAT16)
+                  compute_precision=ct.precision.FLOAT32)
     ml.short_description='Official MobRecon DenseStack SpConv; wrist-relative MPII joints in metres'
     ml.author='Xingyu Chen et al.; experimental Core ML integration by unc0ver1337'
     ml.user_defined_metadata['checkpoint_sha256']=meta['checkpoint_sha256']
@@ -88,7 +88,8 @@ def main():
                 raise ValueError(f'Core ML parity failed: {name} joints={jerr.max()} uv={uerr.max()}')
             records.append({'sample':name,'joint_mean_m':float(jerr.mean()),'joint_max_m':float(jerr.max()),'uv_max':float(uerr.max())})
     report={'model':'MobRecon DenseStack SpConv (official 2023 demo)','checkpoint_sha256':meta['checkpoint_sha256'],
-            'upstream_commit':meta['commit'],'compute':'macOS CPU_ONLY, not iPhone speed/accuracy','cases':records,'parity':'PASS'}
+            'upstream_commit':meta['commit'],'precision':'FLOAT32 (FP16 failed output parity)',
+            'compute':'macOS CPU_ONLY, not iPhone speed/accuracy','cases':records,'parity':'PASS'}
     (assets/'mobrecon-parity.json').write_text(json.dumps(report,indent=2))
     print(json.dumps(report,indent=2))
 
