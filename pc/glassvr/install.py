@@ -31,14 +31,14 @@ class DriverManager:
         return manifest.get('name') == NAME and (root/'bin/win64/driver_glassvr.dll').is_file()
 
     def registered(self):
-        data=self.paths();roots=[Path(p) for p in data.get('external_drivers',[])]
-        for runtime in data.get('runtime',[]):
+        data=self.paths();roots=[Path(p) for p in (data.get('external_drivers') or [])]
+        for runtime in (data.get('runtime') or []):
             folder=Path(runtime)/'drivers'
             if folder.is_dir():roots.extend(p for p in folder.iterdir() if p.is_dir())
         return list(dict.fromkeys(p.resolve() for p in roots if self.valid(p)))
 
     def tool(self):
-        for root in self.paths().get('runtime',[]):
+        for root in (self.paths().get('runtime') or []):
             path = Path(root)/'bin/win64/vrpathreg.exe'
             if path.is_file(): return path
         raise RuntimeError('SteamVR runtime not found. Install/run SteamVR once, then retry.')
@@ -111,7 +111,7 @@ class DriverManager:
         self.wait_for_steamvr()
 
     def configure_multiple_drivers(self):
-        configs=self.paths().get('config',[])
+        configs=self.paths().get('config') or []
         if not configs:raise RuntimeError('SteamVR config path missing. Run SteamVR once before installation.')
         path=Path(configs[0])/'steamvr.vrsettings'
         data=json.loads(path.read_text(encoding='utf8')) if path.exists() else {}
@@ -148,14 +148,15 @@ class DriverManager:
         if not roots: LOG.info('GlassVR driver is not registered');return
         tool=self.tool()
         for root in roots:
-            if str(root) in self.paths().get('external_drivers',[]) or any(Path(p).resolve()==root for p in self.paths().get('external_drivers',[])):
+            if any(Path(p).resolve()==root for p in (self.paths().get('external_drivers') or [])):
                 self.run([str(tool),'removedriver',str(root)],check=True,timeout=20)
             else:
-                allowed={ (Path(p)/'drivers').resolve() for p in self.paths().get('runtime',[]) }
+                allowed={ (Path(p)/'drivers').resolve() for p in (self.paths().get('runtime') or []) }
                 if root.parent not in allowed or not self.valid(root):raise ValueError('refusing to move an unrelated driver')
                 self.shutdown_steam()
                 backup=self.managed.parent/('uninstalled-'+str(time.time_ns()))
                 backup.parent.mkdir(parents=True,exist_ok=True)
                 shutil.move(str(root),str(backup))
                 LOG.info('Internal GlassVR driver moved to %s',backup)
+        if self.registered():raise RuntimeError('GlassVR is still registered; inspect SteamVR paths and permissions')
         LOG.info('GlassVR unregistered. Restart SteamVR to unload it. Driver files and other drivers were preserved.')

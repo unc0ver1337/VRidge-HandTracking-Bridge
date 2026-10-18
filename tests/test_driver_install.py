@@ -70,3 +70,7 @@ def test_internal_driver_is_backed_up_on_uninstall_not_left_active(tmp_path):
     assert closed==[True] and not inside.exists() and not m.registered()
     assert any(m.valid(p) for p in m.managed.parent.glob('uninstalled-*'))
     assert not calls
+
+def test_empty_external_driver_json_null_is_a_valid_fresh_install(tmp_path):
+    m,_=layout(tmp_path);paths=m.paths();paths['external_drivers']=None;m.paths_file.write_text(json.dumps(paths))
+    assert m.registered()==[] and m.tool().is_file()
