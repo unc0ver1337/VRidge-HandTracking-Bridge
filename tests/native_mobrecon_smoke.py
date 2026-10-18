@@ -12,9 +12,10 @@ with tempfile.TemporaryDirectory() as temp:
     shutil.copytree(root/'ios/build/host/mobrecon.mlmodelc',bundle/'mobrecon.mlmodelc')
     for p in sorted((root/'tests/images').glob('*.jpg')):
         photo=cv2.imread(str(p));assert photo is not None
-        for mirror in (False,True):
-            image=cv2.resize(photo,(480,480));image=image[:,::-1] if mirror else image
-            canvas=np.zeros((480,640,3),np.uint8);canvas[:,80:560]=image
+        image=cv2.resize(photo,(480,480));single=np.zeros((480,640,3),np.uint8);single[:,80:560]=image
+        pair=np.zeros((480,640,3),np.uint8);small=cv2.resize(photo,(320,320))
+        pair[80:400,:320]=small;pair[80:400,320:]=small[:,::-1]
+        for label,canvas in (('original',single),('mirror',single[:,::-1].copy()),('two_hands',pair)):
             frame=temp/'frame.bgra';frame.write_bytes(cv2.cvtColor(canvas,cv2.COLOR_BGR2BGRA).tobytes())
             results=json.loads(subprocess.check_output([str(cli),str(bundle),str(frame),'640','480'],text=True))
             for hands in results:
@@ -23,7 +24,9 @@ with tempfile.TemporaryDirectory() as temp:
                     assert xyz.shape==(21,3) and uv.shape==(21,3) and np.isfinite(xyz).all() and np.isfinite(uv).all()
                     assert h['side'] in (1,2) and .02<np.linalg.norm(xyz[9]-xyz[0])<.2
                     assert np.linalg.norm(xyz[0])<1e-5
-            reports.append({'photo':p.name,'mirror':mirror,'hand_counts':[len(h) for h in results]})
+            reports.append({'photo':p.name,'case':label,'hand_counts':[len(h) for h in results]})
     if not any(any(c>0 for c in r['hand_counts']) for r in reports):raise AssertionError('Vision did not detect any real test hand')
+    if not any(any(c==2 for c in r['hand_counts']) for r in reports if r['case']=='two_hands'):
+        raise AssertionError('Native pipeline must process two simultaneous hands')
 report={'native_mobrecon':'PASS','compute':'macOS CPU_ONLY; no iPhone/ANE benchmark','cases':reports}
 (root/'ios/build/native-smoke.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
