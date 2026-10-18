@@ -7,10 +7,10 @@ def package(ipa,build,output):
 from scripts.package_ipa import inject
 from tests.test_packaging import macho
 
-def test_coreml_preserves_source_and_executable_and_embeds_both_models(tmp_path):
+def test_mobrecon_preserves_source_identity_and_executable_and_replaces_model(tmp_path):
     build=tmp_path/'build';build.mkdir();library=struct.pack('<II',0xfeedfacf,0x100000c)+b'SYNTHETIC_LIBRARY'
     (build/'VRidgeHandTracking.dylib').write_bytes(library)
-    for name in ('hand_detector','hand_landmarks_detector'):
+    for name in ('mobrecon',):
         folder=build/(name+'.mlmodelc');folder.mkdir();(folder/'coremldata.bin').write_bytes(b'SYNTHETIC_MODEL')
     source=tmp_path/'source.ipa';output=tmp_path/'preview.ipa';root='Payload/App.app/';binary=inject(macho())
     with zipfile.ZipFile(source,'w') as z:
@@ -26,11 +26,11 @@ def test_coreml_preserves_source_and_executable_and_embeds_both_models(tmp_path)
         assert z.read(root+'Frameworks/VRidgeHandTracking.dylib')==library
         assert root+'hand_landmarker.task' not in z.namelist()
         assert not any('/_CodeSignature/' in n for n in z.namelist())
-        for name in ('hand_detector','hand_landmarks_detector'):assert z.read(root+name+'.mlmodelc/coremldata.bin')==b'SYNTHETIC_MODEL'
+        for name in ('mobrecon',):assert z.read(root+name+'.mlmodelc/coremldata.bin')==b'SYNTHETIC_MODEL'
     # Updating an already prepared preview must also replace nested model files.
-    (build/'hand_detector.mlmodelc/coremldata.bin').write_bytes(b'NEW_MODEL')
+    (build/'mobrecon.mlmodelc/coremldata.bin').write_bytes(b'NEW_MODEL')
     package(output,build,tmp_path/'updated.ipa')
-    with zipfile.ZipFile(tmp_path/'updated.ipa') as z:assert z.read(root+'hand_detector.mlmodelc/coremldata.bin')==b'NEW_MODEL'
+    with zipfile.ZipFile(tmp_path/'updated.ipa') as z:assert z.read(root+'mobrecon.mlmodelc/coremldata.bin')==b'NEW_MODEL'
 
 def test_missing_compiled_models_fail_closed(tmp_path):
     from scripts.package_ipa import model_resources

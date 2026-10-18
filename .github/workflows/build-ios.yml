@@ -1,4 +1,4 @@
-name: VRidge 2.5.1 Core ML build and parity
+name: VRidge 2.6 MobRecon build and parity
 on:
   push:
   pull_request:
@@ -36,29 +36,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - run: python -m pip install numpy==2.4.6 opencv-python-headless==4.13.0.92 coremltools==9.0
-      - name: Test production translation math on synthetic poses
-        run: clang++ -std=c++17 -O2 tests/native_translation.cpp -o /tmp/test-translation && /tmp/test-translation
-      - name: Build ARM64 dynamic library
-        run: bash ios/build.sh
-      - name: Compare native geometry and crop against pinned upstream
-        run: python tests/check_coreml_math.py
-      - name: Compare native Core ML inference against upstream Python
-        run: python tests/check_coreml_inference.py | tee ios/build/coreml-parity.json
-      - name: Verify ARM64 load commands
+          python-version: '3.11'
+      - run: python -m pip install torch==2.7.1 coremltools==9.0 numpy==1.26.4 scipy==1.15.3 opencv-python-headless==4.11.0.86 gdown==5.2.0 pytest scipy PyYAML zeroconf openvr
+      - run: python -m pytest -q
+      - name: Test ROI and camera translation math
         run: |
-          file ios/build/VRidgeHandTracking.dylib
-          otool -l ios/build/VRidgeHandTracking.dylib > ios/build/load-commands.txt
-          shasum -a 256 ios/build/VRidgeHandTracking.dylib > ios/build/SHA256SUMS
+          clang++ -std=c++17 -O2 tests/native_mobrecon_math.cpp -o /tmp/roi && /tmp/roi
+          clang++ -std=c++17 -O2 tests/native_translation.cpp -o /tmp/translation && /tmp/translation
+      - name: Convert official model, verify parity, build iOS and host models
+        run: bash ios/build.sh
+      - name: Smoke native Vision ROI and MobRecon inference
+        run: python tests/native_mobrecon_smoke.py
       - uses: actions/upload-artifact@v4
         with:
-          name: ios-coreml
+          name: ios-mobrecon
           path: |
             ios/build/VRidgeHandTracking.dylib
-            ios/build/hand_detector.mlmodelc/
-            ios/build/hand_landmarks_detector.mlmodelc/
+            ios/build/mobrecon.mlmodelc/
             ios/build/load-commands.txt
-            ios/build/SHA256SUMS
-            ios/build/coreml-parity.json
+            ios/build/mobrecon-parity.json
+            ios/build/native-smoke.json
           retention-days: 14

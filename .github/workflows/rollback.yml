@@ -1,0 +1,28 @@
+
+name: Rollback to 2.5.1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ROLLBACK_TOKEN }}
+
+      - name: Backup version 2.6
+        run: |
+          git push origin HEAD:refs/heads/backup-before-rollback
+
+      - name: Restore version 2.5.1
+        run: |
+          git reset --hard cd3c8d72c0f4d6cfbc2044252da6a51448c9220e
+          git push --force origin HEAD:main
