@@ -1,0 +1,23 @@
+
+name: Rollback to 2.5.1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore version 2.5.1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard cd3c8d72c0f4d6cfbc2044252da6a51448c9220e
+          git push --force origin HEAD:main
