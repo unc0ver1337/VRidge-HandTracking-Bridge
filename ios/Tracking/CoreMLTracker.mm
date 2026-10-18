@@ -61,7 +61,7 @@ VNHumanHandPoseObservationJointNameLittleMCP,VNHumanHandPoseObservationJointName
         int side=observation.chirality==VNChiralityLeft?1:observation.chirality==VNChiralityRight?2:0;
         if(!side)continue;
         NSError *local=nil;NSDictionary *points=[observation recognizedPointsForGroupKey:VNHumanHandPoseObservationJointsGroupNameAll error:&local];if(!points)continue;
-        std::array<Point,21> vision;std::array<float,21> confidence;
+        std::array<corehands::Point,21> vision;std::array<float,21> confidence;
         for(NSUInteger i=0;i<21;i++){
             VNRecognizedPoint *p=points[names[i]];vision[i]={(float)p.location.x,1.f-(float)p.location.y,0};confidence[i]=p?p.confidence:0;
         }
