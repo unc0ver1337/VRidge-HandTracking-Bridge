@@ -17,6 +17,8 @@ import mobrecon.models.modules as layers
 def main():
     torch.set_num_threads(2);torch.manual_seed(0)
     meta=json.loads((ROOT/'models/upstream.json').read_text())
+    if hashlib.sha256((ROOT/'models/topology.npz').read_bytes()).hexdigest()!=meta['topology_sha256']:
+        raise ValueError('topology SHA256 mismatch')
     assets=ROOT/'ios/assets';assets.mkdir(exist_ok=True,parents=True)
     checkpoint=assets/'mobrecon_densestack.pt'
     if not checkpoint.exists():

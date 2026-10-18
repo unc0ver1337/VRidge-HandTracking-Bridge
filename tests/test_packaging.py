@@ -2,7 +2,7 @@ import struct,pytest,zipfile,plistlib
 from scripts.package_ipa import inject,LOAD_PATH,package
 
 def models(folder,data=b'SYNTHETIC_MODEL'):
-    for name in ('hand_detector','hand_landmarks_detector'):
+    for name in ('mobrecon',):
         model=folder/(name+'.mlmodelc');model.mkdir(exist_ok=True);(model/'coremldata.bin').write_bytes(data)
 
 def macho(encrypted=0,slack=True):
@@ -36,10 +36,10 @@ def test_complete_private_packaging_metadata_and_preservation(tmp_path):
     assert source.read_bytes()==original
     with zipfile.ZipFile(out) as z:
         pl=plistlib.loads(z.read('Payload/Original.app/Info.plist'))
-        assert pl['CFBundleIdentifier']=='example.original' and pl['MinimumOSVersion']=='16.0'
+        assert pl['CFBundleIdentifier']=='com.riftcat.vridge2.mobrecon.experimental' and pl['MinimumOSVersion']=='16.0'
         assert pl['NSBonjourServices']==['_mpbridge._udp','_original._udp']
-        assert pl['CFBundleURLTypes']==info['CFBundleURLTypes']
-        assert z.read('Payload/Original.app/hand_detector.mlmodelc/coremldata.bin')==b'SYNTHETIC_MODEL'
+        assert 'CFBundleURLTypes' not in pl
+        assert z.read('Payload/Original.app/mobrecon.mlmodelc/coremldata.bin')==b'SYNTHETIC_MODEL'
         assert z.read('Payload/Original.app/Original')[4096:]==macho()[4096:]
         assert z.read('Payload/Original.app/resource.bin')==b'KEEP_ORIGINAL_RESOURCE'
 
@@ -58,6 +58,6 @@ def test_update_injected_ipa_preserves_executable(tmp_path):
         assert z.read(root+'App')==binary
         assert z.read(root+'Frameworks/VRidgeHandTracking.dylib')==b'NEW_DYLIB'
         assert plistlib.loads(z.read(root+'VHBridge.plist'))['FPS']==30
-        assert plistlib.loads(z.read(root+'Info.plist'))['CFBundleIdentifier']=='com.riftcat.vridge2.test'
-        assert z.read(root+'hand_detector.mlmodelc/coremldata.bin')==b'MODEL'
+        assert plistlib.loads(z.read(root+'Info.plist'))['CFBundleIdentifier']=='com.riftcat.vridge2.mobrecon.experimental'
+        assert z.read(root+'mobrecon.mlmodelc/coremldata.bin')==b'MODEL'
         assert root+'_CodeSignature/CodeResources' not in z.namelist()

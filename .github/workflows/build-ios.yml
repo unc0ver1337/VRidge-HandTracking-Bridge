@@ -1,22 +1,34 @@
-name: MobRecon Core ML conversion and parity
+name: MobRecon iPhone experimental build and parity
 on:
   push:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  convert:
+  ios:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install torch==2.7.1 coremltools==9.0 numpy==1.26.4 scipy==1.15.3 opencv-python-headless==4.11.0.86 gdown==5.2.0
-      - run: python scripts/convert_mobrecon.py
+      - run: python -m pip install torch==2.7.1 coremltools==9.0 numpy==1.26.4 scipy==1.15.3 opencv-python-headless==4.11.0.86 gdown==5.2.0 pytest scipy PyYAML zeroconf openvr
+      - run: python -m pytest -q
+      - name: Test ROI and camera translation math
+        run: |
+          clang++ -std=c++17 -O2 tests/native_mobrecon_math.cpp -o /tmp/roi && /tmp/roi
+          clang++ -std=c++17 -O2 tests/native_translation.cpp -o /tmp/translation && /tmp/translation
+      - name: Convert official model, verify parity, build iOS and host models
+        run: bash ios/build.sh
+      - name: Smoke native Vision ROI and MobRecon inference
+        run: python tests/native_mobrecon_smoke.py
       - uses: actions/upload-artifact@v4
         with:
-          name: mobrecon-model
+          name: ios-mobrecon
           path: |
-            ios/assets/mobrecon.mlpackage/
-            ios/assets/mobrecon-parity.json
+            ios/build/VRidgeHandTracking.dylib
+            ios/build/mobrecon.mlmodelc/
+            ios/build/load-commands.txt
+            ios/build/mobrecon-parity.json
+            ios/build/native-smoke.json
+          retention-days: 14

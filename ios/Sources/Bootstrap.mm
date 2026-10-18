@@ -11,7 +11,7 @@
 @implementation VHNotice
 - (void)show:(NSString *)text {
     NSLog(@"VH: %@",text);
-    UNMutableNotificationContent *c=[UNMutableNotificationContent new]; c.title=@"VRidge Hand Tracking 2.5.1"; c.body=text;
+    UNMutableNotificationContent *c=[UNMutableNotificationContent new]; c.title=@"VRidge MobRecon Test"; c.body=text;
     UNNotificationRequest *r=[UNNotificationRequest requestWithIdentifier:@"VHBridge.status" content:c trigger:nil];
     [UNUserNotificationCenter.currentNotificationCenter addNotificationRequest:r withCompletionHandler:^(NSError *e){if(e)NSLog(@"VH notification: %@",e);}];
 }
