@@ -38,3 +38,7 @@ class PoseFilter:
         pred=np.zeros(3) if self.recovering else self.velocity*self.prediction
         pred*=min(1.,0.03/max(np.linalg.norm(pred),1e-9))
         return self.p+pred,self.q.copy()
+    def reset_rotation(self,q):
+        q=np.asarray(q,float)
+        if q.shape!=(4,) or not np.isfinite(q).all() or np.linalg.norm(q)<1e-8:raise ValueError('invalid filter orientation')
+        self.q=q/np.linalg.norm(q)

@@ -5,15 +5,22 @@
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
 #import <simd/simd.h>
-#include "TranslationFit.h"
+#import <Vision/Vision.h>
+#include <mutex>
+#include <map>
 #include <atomic>
+#include <chrono>
 
 @interface VHTracker () <AVCaptureVideoDataOutputSampleBufferDelegate>
 @end
 @implementation VHTracker {
     AVCaptureSession *_session; AVCaptureDevice *_camera;
-    dispatch_queue_t _captureQueue; dispatch_queue_t _inferenceQueue;
+    dispatch_queue_t _captureQueue; dispatch_queue_t _inferenceQueue; dispatch_queue_t _fingerQueue;
     VHCoreMLTracker *_request; CIContext *_context;
+    VNDetectHumanHandPoseRequest *_vision;
+    std::atomic_bool _fingerBusy; double _lastFinger;
+    struct FingerSample {corehands::Hand hand;double capture;corehands::Point wrist;};
+    std::mutex _fingerMutex;std::map<int,FingerSample> _fingers;
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence;
     CVPixelBufferPoolRef _pool; int _width,_height;
@@ -23,10 +30,13 @@
 - (instancetype)initWithSettings:(NSDictionary *)settings {
     if((self=[super init])){
         _settings=settings; _captureQueue=dispatch_queue_create("vh.capture",DISPATCH_QUEUE_SERIAL); _inferenceQueue=dispatch_queue_create("vh.mediapipe",DISPATCH_QUEUE_SERIAL);
+        _fingerQueue=dispatch_queue_create("vh.fingers",DISPATCH_QUEUE_SERIAL);
+        _vision=[VNDetectHumanHandPoseRequest new];_vision.maximumHandCount=2;
+        _fingerBusy=false;_lastFinger=0;
         _busy=false; _wanted=false; _pool=nullptr; _width=640; _height=480;
-        dispatch_async(_inferenceQueue,^{
+        dispatch_async(_fingerQueue,^{
         NSError *modelError=nil;
-        self->_request=[[VHCoreMLTracker alloc] initWithBundle:NSBundle.mainBundle error:&modelError];
+        self->_request=[[VHCoreMLTracker alloc] initWithBundle:NSBundle.mainBundle skeletonOnly:YES error:&modelError];
         if(!self->_request)NSLog(@"Core ML model unavailable: %@",modelError);
         });
         _context=[CIContext contextWithOptions:@{kCIContextCacheIntermediates:@NO}];
@@ -104,7 +114,9 @@
     // Only this tweak's own session. Existing host capture sessions are observed,
     // never stopped, swizzled, or reconfigured.
     [_session stopRunning]; _session=nil; _camera=nil;
-    dispatch_sync(_inferenceQueue,^{[self->_request reset];});
+    dispatch_sync(_inferenceQueue,^{});
+    dispatch_sync(_fingerQueue,^{[self->_request reset];});
+    {std::lock_guard<std::mutex> lock(_fingerMutex);_fingers.clear();}_lastFinger=0;
     if(_pool){CVPixelBufferPoolRelease(_pool);_pool=nullptr;}
 }
 - (void)hostStarted:(NSNotification *)n {
@@ -138,7 +150,7 @@
     dispatch_async(_captureQueue,^{if(n.object==self->_session&&self->_wanted)[self->_session startRunning];});
 }
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sample fromConnection:(AVCaptureConnection *)connection {
-    if(_busy.exchange(true))return;
+    if(!_wanted||_busy.exchange(true))return;
     CVPixelBufferRef source=CMSampleBufferGetImageBuffer(sample); size_t sw=CVPixelBufferGetWidth(source),sh=CVPixelBufferGetHeight(source);
     CVPixelBufferRef scaled=nullptr;
     const bool nativeSize=(sw==(size_t)_width&&sh==(size_t)_height);
@@ -151,7 +163,7 @@
         image=[image imageByApplyingTransform:CGAffineTransformMake(scale,0,0,scale,ox,oy)];
         [_context render:image toCVPixelBuffer:scaled bounds:CGRectMake(0,0,_width,_height) colorSpace:nil];
     }
-    VHHeader header={}; memcpy(header.magic,"MPBR",4);header.version=2;header.sequence=_sequence++; header.width=_width;header.height=_height;
+    VHHeader header={}; memcpy(header.magic,"MPBR",4);header.version=3;header.flags=2;header.sequence=_sequence++; header.width=_width;header.height=_height;
     // Convert sample time from capture session clock into host clock used by sync.
     CMTime pts=CMSampleBufferGetPresentationTimeStamp(sample);
     CMClockRef clock=_session.synchronizationClock;
@@ -162,55 +174,83 @@
         header.fx=k.columns[0][0]*scale;header.fy=k.columns[1][1]*scale;
         header.cx=k.columns[2][0]*scale+ox; header.cy=k.columns[2][1]*scale+oy;
     }else{
-        header.flags=1;float f=(float)(sw/(2*tan(_camera.activeFormat.videoFieldOfView*M_PI/360)));
+        header.flags|=1;float f=(float)(sw/(2*tan(_camera.activeFormat.videoFieldOfView*M_PI/360)));
         header.fx=header.fy=f*scale;header.cx=_width*.5;header.cy=_height*.5;
     }
     dispatch_async(_inferenceQueue,^{ @autoreleasepool {
-        NSError *error=nil;
-        if(!self->_request){CVPixelBufferRelease(scaled);self->_busy=false;return;}
-        auto result=[self->_request process:scaled capture:header.capture error:&error];
-        CVPixelBufferRelease(scaled);
-        if(!error){
-            VHHeader h=header;NSMutableData *body=[NSMutableData data];
-            for(NSUInteger i=0;i<MIN((NSUInteger)2,result.size());i++){
-                const auto& observation=result[i];VHHand hand={};hand.side=observation.side;hand.identity=(uint32_t)(i+1);
-                bool finite=true;
-                for(NSUInteger j=0;j<21;j++){
-                    const auto&p=observation.landmarks[j];const auto&w=observation.world[j];
-                    finite=finite&&isfinite(p.x)&&isfinite(p.y)&&isfinite(w.x)&&isfinite(w.y)&&isfinite(w.z);
-                    hand.landmarks[j][0]=fmax(0,fmin(1,p.x));hand.landmarks[j][1]=fmax(0,fmin(1,p.y));hand.landmarks[j][2]=1;
-                    hand.world[j][0]=w.x;hand.world[j][1]=w.y;hand.world[j][2]=w.z;
-                }
-                if(!finite)continue;
-                // MediaPipe world points already carry camera-relative orientation.
-                // Solve translation from 2D rays and metric model points on the phone.
-                mpbridge::Fit fit;
-                hand.rotation[3]=1;
-                bool translationValid=mpbridge::translationFit(hand.world,hand.landmarks,h.width,h.height,h.fx,h.fy,h.cx,h.cy,fit);
-                hand.reprojection=fit.error;
-                if(translationValid){
-                    vector_float3 translation={fit.translation[0],fit.translation[1],fit.translation[2]};
-                    vector_float3 wrist={hand.world[0][0],hand.world[0][1],hand.world[0][2]};
-                    vector_float3 index={hand.world[5][0],hand.world[5][1],hand.world[5][2]};
-                    vector_float3 little={hand.world[17][0],hand.world[17][1],hand.world[17][2]};
-                    vector_float3 middle={hand.world[9][0],hand.world[9][1],hand.world[9][2]};
-                    vector_float3 x=(index-little)*(hand.side==1?-1.f:1.f);vector_float3 y=middle-wrist;
-                    bool valid=simd_length(x)>.005&&simd_length(y)>.005;
-                    if(valid){x=simd_normalize(x);y-=x*simd_dot(x,y);valid=simd_length(y)>.005;}
-                    vector_float3 position=wrist+translation;
-                    if(valid){
-                        y=simd_normalize(y);vector_float3 z=simd_cross(x,y);matrix_float3x3 basis={x,y,z};
-                        simd_quatf q=simd_quaternion(basis);
-                        for(int c=0;c<3;c++)hand.position[c]=position[c];
-                        for(int c=0;c<4;c++)hand.rotation[c]=q.vector[c];hand.poseValid=1;
+        if(!self->_wanted){CVPixelBufferRelease(scaled);self->_busy=false;return;}
+        const auto begin=std::chrono::steady_clock::now();NSError *error=nil;
+        VNImageRequestHandler *handler=[[VNImageRequestHandler alloc]initWithCVPixelBuffer:scaled orientation:kCGImagePropertyOrientationUp options:@{}];
+        BOOL ok=[handler performRequests:@[self->_vision] error:&error];
+        std::vector<corehands::Hand> regions;std::vector<VHHand> records;
+        NSArray<VNHumanHandPoseObservation *> *observations=self->_vision.results;
+        static NSArray<VNHumanHandPoseObservationJointName> *names;
+        static dispatch_once_t once;dispatch_once(&once,^{names=@[
+            VNHumanHandPoseObservationJointNameWrist,
+            VNHumanHandPoseObservationJointNameThumbCMC,VNHumanHandPoseObservationJointNameThumbMP,VNHumanHandPoseObservationJointNameThumbIP,VNHumanHandPoseObservationJointNameThumbTip,
+            VNHumanHandPoseObservationJointNameIndexMCP,VNHumanHandPoseObservationJointNameIndexPIP,VNHumanHandPoseObservationJointNameIndexDIP,VNHumanHandPoseObservationJointNameIndexTip,
+            VNHumanHandPoseObservationJointNameMiddleMCP,VNHumanHandPoseObservationJointNameMiddlePIP,VNHumanHandPoseObservationJointNameMiddleDIP,VNHumanHandPoseObservationJointNameMiddleTip,
+            VNHumanHandPoseObservationJointNameRingMCP,VNHumanHandPoseObservationJointNameRingPIP,VNHumanHandPoseObservationJointNameRingDIP,VNHumanHandPoseObservationJointNameRingTip,
+            VNHumanHandPoseObservationJointNameLittleMCP,VNHumanHandPoseObservationJointNameLittlePIP,VNHumanHandPoseObservationJointNameLittleDIP,VNHumanHandPoseObservationJointNameLittleTip];});
+        if(ok)for(VNHumanHandPoseObservation *observation in observations){
+            VHHand hand={};corehands::Hand region;
+            hand.side=observation.chirality==VNChiralityLeft?1:(observation.chirality==VNChiralityRight?2:0);
+            if(!hand.side)continue;hand.identity=hand.side;hand.rotation[3]=1;region.side=hand.side;
+            auto points=[observation recognizedPointsForGroupKey:VNHumanHandPoseObservationJointsGroupNameAll error:&error];
+            bool palmValid=true;
+            for(int j=0;j<21;j++){
+                VNRecognizedPoint *point=points[names[j]];
+                float x=point?point.location.x:0,y=point?1-point.location.y:0,c=point?point.confidence:0;
+                hand.landmarks[j][0]=std::clamp(x,0.f,1.f);hand.landmarks[j][1]=std::clamp(y,0.f,1.f);hand.landmarks[j][2]=std::clamp(c,0.f,1.f);
+                region.landmarks[j]={x,y,0};
+                if((j==0||j==5||j==9||j==13||j==17)&&c<.35f)palmValid=false;
+            }
+            if(!palmValid)continue;
+            // The cache is stamped with the inference SOURCE frame. A result is
+            // never labelled as current just because it completed this frame.
+            {std::lock_guard<std::mutex> lock(self->_fingerMutex);
+                auto found=self->_fingers.find(hand.side);
+                if(found!=self->_fingers.end()){
+                    const auto&f=found->second;
+                    double age=header.capture-f.capture;
+                    double dx=f.wrist.x-region.landmarks[0].x,dy=f.wrist.y-region.landmarks[0].y;
+                    if(age>=0&&age<=.25&&dx*dx+dy*dy<.0225){
+                        hand.fingerCapture=f.capture;
+                        for(int j=0;j<21;j++){const auto&w=f.hand.world[j];hand.world[j][0]=w.x;hand.world[j][1]=w.y;hand.world[j][2]=w.z;}
                     }
                 }
-                [body appendBytes:&hand length:sizeof(hand)];h.count++;
             }
-            NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];[data appendData:body];if(self.frame)self.frame(data);
-        }else NSLog(@"Core ML frame error: %@",error);
-        self->_busy=false;
+            records.push_back(hand);regions.push_back(region);
+            if(records.size()==2)break;
+        }
+        // Pose packets leave before finger inference is scheduled. No second
+        // full-image neural palm detector, no unbounded capture/inference queue.
+        VHHeader h=header;h.count=(uint8_t)records.size();
+        NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];
+        for(const auto&hand:records)[data appendBytes:&hand length:sizeof(hand)];
+        if(self.frame&&self->_wanted)self.frame(data);
+        if(ok&&!regions.empty()&&header.capture-self->_lastFinger>=1./15.&&!self->_fingerBusy.exchange(true)){
+            self->_lastFinger=header.capture;CVPixelBufferRetain(scaled);
+            dispatch_async(self->_fingerQueue,^{@autoreleasepool {
+                NSError *fingerError=nil;
+                if(self->_wanted&&self->_request){
+                    auto results=[self->_request fingers:scaled regions:regions error:&fingerError];
+                    if(!fingerError){std::lock_guard<std::mutex> lock(self->_fingerMutex);
+                        for(const auto&hand:results)for(const auto&region:regions)if(hand.side==region.side){
+                            self->_fingers[hand.side]={hand,header.capture,region.landmarks[0]};break;
+                        }
+                    }else NSLog(@"Finger inference: %@",fingerError);
+                }
+                CVPixelBufferRelease(scaled);self->_fingerBusy=false;
+            }});
+        }
+        if(!ok)NSLog(@"Vision: %@",error);
+        static double total=0;static unsigned count=0;
+        total+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
+        if(++count==120){NSLog(@"Vision pose mean %.2f ms; capture 30 FPS, fingers <=15 FPS independent",total/count);count=0;total=0;}
+        CVPixelBufferRelease(scaled);self->_busy=false;
     }});
 }
+
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; if(_pool)CVPixelBufferPoolRelease(_pool); }
 @end

@@ -1,0 +1,16 @@
+{
+  "upstream_commit": "4d530752a52febb39a3cb9ade3632e4c2ce77425",
+  "files": {
+    "driver.vrdrivermanifest": "fe09df3cbb6f9b107fe0a7634fec061a56a34c0996f44ed23aa510aee6700f58",
+    "resources/settings/driver.vrsettings": "c74a81ea62289a9c110b54335fa2f15bbb26e5d67a5e9d06e16c4d06888c8e4a",
+    "bin/win64/carina_vio.dll": "3959e711015a4b19c021286e79eded24652c15e51672c38023eba822d96a4b6b",
+    "bin/win64/driver_glassvr.dll": "448eb2ae8dc8c5a135efff8f2d43062033af9e5e5327f05e8ff4e71edb9f2246",
+    "bin/win64/glasses.dll": "22fcde41eabe55a20a827d99f0e51beaa9e0516776eada7890d10f19aee09f4a",
+    "bin/win64/glew32.dll": "ce5f1d13c940ec10f32ef7cef5fb10bf287d862c1a5e1cae2fcce4bf29710481",
+    "bin/win64/hidapi.dll": "d4c05ba2138cb5259a7f796464b5eaa63b9f8f67bb5cb003f96989244ee01583",
+    "bin/win64/libusb-1.0.dll": "5f9b026847dadff2ee0891e1b6b607cd9a5e89eef4fadef17a25c72e781d5a3c",
+    "bin/win64/opencv_world4100.dll": "e6e31e55b9b377b775782c4b27a80b2460dffe3dbee7898e034d25729dca0198"
+  },
+  "patched_dll_sha256": "7ed26fa705585ae784cf8cd94745939676b53b5d70a323b04fb025ed0ac716ec",
+  "patched_release_url": "https://github.com/unc0ver1337/VRidge-HandTracking-Bridge/releases/download/v2.5.1/VRidge-HandTracking-Bridge-v2.5.1.zip"
+}

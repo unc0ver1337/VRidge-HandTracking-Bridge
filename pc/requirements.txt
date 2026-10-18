@@ -5,3 +5,4 @@ zeroconf>=0.136,<1
 ifaddr>=0.2,<1
 openvr>=2.12,<3
 pytest>=8,<10
+opencv-python-headless>=4.11,<5

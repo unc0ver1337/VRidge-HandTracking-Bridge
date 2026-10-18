@@ -14,7 +14,7 @@ xcrun --sdk iphoneos clang++ -std=c++17 -dynamiclib -arch arm64 -isysroot "$SDK"
   Sources/Bootstrap.mm Network/Network.mm Tracking/Tracker.mm Tracking/CoreMLTracker.mm \
   -framework Foundation -framework UIKit -framework AVFoundation -framework CoreML \
   -framework CoreMedia -framework CoreVideo -framework CoreImage -framework ImageIO \
-  -framework UserNotifications -install_name @executable_path/Frameworks/VRidgeHandTracking.dylib \
+  -framework Vision -framework UserNotifications -install_name @executable_path/Frameworks/VRidgeHandTracking.dylib \
   -o build/VRidgeHandTracking.dylib
 codesign --force --sign - build/VRidgeHandTracking.dylib
 codesign --verify --strict build/VRidgeHandTracking.dylib

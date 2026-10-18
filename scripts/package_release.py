@@ -29,6 +29,8 @@ def package(ipa,windows,ios,output,commit,ci_run):
     files['Windows/config.yaml']=(ROOT/'pc/config.yaml').read_bytes()
     files['Windows/Start-Bridge.cmd']=b'@echo off\r\ncd /d "%~dp0"\r\nVRidgeHandBridge.exe --config config.yaml\r\npause\r\n'
     files['Windows/Allow-Local-Network.ps1']=(ROOT/'scripts/allow_local_network.ps1').read_bytes()
+    files['Windows/Uninstall-GlassVR.cmd']=(ROOT/'Uninstall-GlassVR.cmd').read_bytes()
+    if not (windows/'GlassVR/glassvrdriver/bin/win64/driver_glassvr.dll').is_file():raise ValueError('complete bundled GlassVR driver required')
     files[f'iOS/VRidge-HandTracking-{version}-Unsigned.ipa']=ipa.read_bytes()
     for name in ('VRidgeHandTracking.dylib','load-commands.txt','coreml-parity.json'):
         files['iOS/library/'+name]=(ios/name).read_bytes()
@@ -42,7 +44,7 @@ def package(ipa,windows,ios,output,commit,ci_run):
         if not name:continue
         if Path(name).suffix.lower() in ('.ipa','.p12','.mobileprovision','.key','.exe','.dll','.dylib','.zip'):raise ValueError('private binary in git index')
         files['Source/'+name]=(ROOT/name).read_bytes()
-    files['BUILD.json']=json.dumps({'project':'VRidge Hand Tracking Bridge','version':version,'backend':'native Core ML fasthands stock fp16','source_commit':commit,'ci_run':ci_run,'ipa_signed':False,'device_verified':False,'bundle_id':info['CFBundleIdentifier'],'network':'MPBR/v2 UDP39580','hardware_runtime_started_during_build':False,'fixed_grip_preset':'owner-approved 2.5 session','manual_centering':False},indent=2).encode()
+    files['BUILD.json']=json.dumps({'project':'VRidge Hand Tracking Bridge','version':version,'backend':'Vision palm PnP + independent Core ML fingers','source_commit':commit,'ci_run':ci_run,'ipa_signed':False,'device_verified':False,'bundle_id':info['CFBundleIdentifier'],'network':'MPBR/v3 UDP39580','hardware_runtime_started_during_build':False,'manual_centering':True,'capture_target_fps':30,'fingers_max_fps':15},indent=2).encode()
     files['SHA256SUMS.txt']=''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(files.items())).encode()
     output.parent.mkdir(exist_ok=True,parents=True)
     temp=output.with_suffix('.zip.tmp')

@@ -1,4 +1,4 @@
-name: VRidge 2.5.1 Core ML build and parity
+name: VRidge 3.0 Vision + Core ML hybrid
 on:
   push:
   pull_request:
@@ -21,6 +21,11 @@ jobs:
         run: |
           artifacts/windows/VRidgeHandBridge/VRidgeHandBridge.exe --help
           artifacts/windows/VRidgeHandBridge/VRidgeHandBridge.exe --version
+      - name: Assemble complete GlassVR driver (no installation)
+        run: |
+          python scripts/fetch_glassvr.py artifacts/windows/VRidgeHandBridge/GlassVR/glassvrdriver
+          Copy-Item pc/config.yaml artifacts/windows/VRidgeHandBridge/config.yaml
+          Copy-Item Uninstall-GlassVR.cmd artifacts/windows/VRidgeHandBridge/Uninstall-GlassVR.cmd
       - uses: actions/upload-artifact@v4
         with:
           name: windows-exe

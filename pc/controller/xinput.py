@@ -1,5 +1,5 @@
 import ctypes,sys
-from dataclasses import dataclass,field
+from dataclasses import dataclass,field,replace
 import numpy as np
 
 MASK={'dpad_up':1,'dpad_down':2,'dpad_left':4,'dpad_right':8,'start':16,'back':32,'ls':64,'rs':128,'lb':256,'rb':512,'a':4096,'b':8192,'x':16384,'y':32768}
@@ -39,10 +39,19 @@ class XInput:
         return Input(True,{k for k,m in MASK.items() if p.buttons&m},trigger(p.lt),trigger(p.rt),deadzone(p.lx/32768,p.ly/32768,self.zone),deadzone(p.rx/32768,p.ry/32768,self.zone))
 
 class Mapper:
-    def __init__(self,mapping): self.mapping=mapping; self.side=2; self.last=set(); self.split=True
+    def __init__(self,mapping):
+        self.mapping=mapping; self.side=2; self.last=set(); self.split=True
+        self.center_held=False;self.center_consumed=False
     def update(self,pad):
         m=self.mapping; events=[]; out={1:{},2:{}}
         down=pad.buttons-self.last; self.last=pad.buttons.copy()
+        combo=pad.connected and {'back','start'}<=pad.buttons
+        if combo!=self.center_held:events.append('center_start' if combo else 'center_stop')
+        self.center_held=combo
+        if combo:self.center_consumed=True
+        consumed=self.center_consumed
+        if not pad.connected or not (pad.buttons&{'back','start'}):self.center_consumed=False
+        if consumed:pad=replace(pad,buttons=pad.buttons-{'back','start'})
         if not pad.connected: self.last=set(); return out,events
         if m.get('layout')=='dual':
             for side,prefix,stick in ((1,'left',pad.left),(2,'right',pad.right)):

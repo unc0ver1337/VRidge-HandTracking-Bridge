@@ -39,6 +39,9 @@ struct PixelLock {
     double _lastCapture,_totalMS;NSUInteger _frames;
 }
 - (instancetype)initWithBundle:(NSBundle *)bundle error:(NSError **)error {
+    return [self initWithBundle:bundle skeletonOnly:NO error:error];
+}
+- (instancetype)initWithBundle:(NSBundle *)bundle skeletonOnly:(BOOL)skeletonOnly error:(NSError **)error {
     if((self=[super init])){
         MLModelConfiguration *config=[MLModelConfiguration new];
         // Keep GPU available for VRidge. Core ML may use CPU for unsupported ops;
@@ -49,8 +52,8 @@ struct PixelLock {
 #endif
         NSURL *det=[bundle URLForResource:@"hand_detector" withExtension:@"mlmodelc"];
         NSURL *lm=[bundle URLForResource:@"hand_landmarks_detector" withExtension:@"mlmodelc"];
-        if(!det||!lm){fail(error,@"Missing compiled Core ML models");return nil;}
-        _detector=[MLModel modelWithContentsOfURL:det configuration:config error:error];if(!_detector)return nil;
+        if((!skeletonOnly&&!det)||!lm){fail(error,@"Missing compiled Core ML models");return nil;}
+        if(!skeletonOnly){_detector=[MLModel modelWithContentsOfURL:det configuration:config error:error];if(!_detector)return nil;}
         _landmarker=[MLModel modelWithContentsOfURL:lm configuration:config error:error];if(!_landmarker)return nil;
         _detectorInput=[[MLMultiArray alloc]initWithShape:@[@1,@192,@192,@3] dataType:MLMultiArrayDataTypeFloat32 error:error];
         _landmarkInput=[[MLMultiArray alloc]initWithShape:@[@1,@224,@224,@3] dataType:MLMultiArrayDataTypeFloat32 error:error];
@@ -60,6 +63,22 @@ struct PixelLock {
         if(!_detectorFeatures||!_landmarkFeatures)return nil;
         NSLog(@"Core ML preview loaded fp16 models; computeUnits=%ld, numHands=2",(long)config.computeUnits);
     }return self;
+}
+- (std::vector<corehands::Hand>)fingers:(CVPixelBufferRef)buffer regions:(const std::vector<corehands::Hand>&)regions error:(NSError **)error {
+    using namespace corehands;std::vector<Hand> hands;PixelLock lock(buffer);
+    if(!lock.locked){fail(error,@"Cannot lock finger frame");return hands;}
+    auto image=(const uint8_t *)CVPixelBufferGetBaseAddress(buffer);
+    int iw=(int)CVPixelBufferGetWidth(buffer),ih=(int)CVPixelBufferGetHeight(buffer),stride=(int)CVPixelBufferGetBytesPerRow(buffer);
+    for(const auto&region:regions){
+        auto r=nextRect(region,iw,ih);if(!usable(r))continue;
+        crop(image,iw,ih,stride,r,224,true,(float *)_landmarkInput.dataPointer);
+        auto result=[_landmarker predictionFromFeatures:_landmarkFeatures error:error];std::vector<std::vector<float>> raw;
+        if(!outputs(result,@[@"Identity",@"Identity_1",@"Identity_2",@"Identity_3"],{63,1,1,63},raw,error))return {};
+        if(raw[1][0]<=.5f)continue;
+        auto hand=project(raw[0].data(),raw[3].data(),.5f,r);
+        // Side belongs to the matching Vision ROI, never to a separate detector.
+        hand.side=region.side;hands.push_back(hand);
+    }return hands;
 }
 - (void)reset {_tracked.clear();_lastCapture=0;}
 - (std::vector<corehands::Hand>)process:(CVPixelBufferRef)buffer capture:(double)capture error:(NSError **)error {

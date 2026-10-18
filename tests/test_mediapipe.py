@@ -68,12 +68,7 @@ def test_direct_decoder_rejects_nonunit_orientation(side):
     h=Hand(1,side,0,np.full((21,3),.5),np.zeros((21,3)),np.array([0,0,.5]),np.array([0,0,0,2]),0.,True)
     with pytest.raises(ValueError,match='MP pose'):Decoder().decode(h,side)
 
-def test_production_contains_no_vision_fallback_or_old_solver():
+def test_legacy_model_pose_decoder_is_not_used_by_hybrid_runtime():
     from pathlib import Path
-    root=Path(__file__).resolve().parents[1]
-    assert not (root/'pc/reconstruction/solver.py').exists()
-    assert not (root/'pc/reconstruction/model.py').exists()
-    assert not (root/'pc/reconstruction/calibration.py').exists()
-    tracker=(root/'ios/Tracking/Tracker.mm').read_text()
-    assert 'VNDetectHumanHandPoseRequest' not in tracker
-    assert 'VHCoreMLTracker' in tracker and '_width=640; _height=480;' in tracker
+    source=(Path(__file__).resolve().parents[1]/'pc/bridge.py').read_text(encoding='utf8')
+    assert 'from .tracking.hybrid import Decoder' in source

@@ -9,7 +9,7 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     uint32_t identity; uint8_t side; int8_t palm; uint16_t reserved;
     float landmarks[21][3];
-    float world[21][3]; float position[3],rotation[4],reprojection; uint32_t poseValid;
+    float world[21][3]; float position[3],rotation[4],reprojection; uint32_t poseValid; double fingerCapture;
 } VHHand;
 static_assert(sizeof(VHHeader)==48,"wire header");
-static_assert(sizeof(VHHand)==548,"wire hand");
+static_assert(sizeof(VHHand)==556,"wire hand");

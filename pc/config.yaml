@@ -1,3 +1,8 @@
+# Vision controls pose; Core ML controls only fingers. MCP breadth in metres.
+reconstruction:
+  palm_width_m: 0.085
+  max_reprojection_px: 12.0
+  max_angular_speed_deg: 600.0
 network:
   port: 39580
   timeout_s: 3.0

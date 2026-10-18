@@ -16,7 +16,7 @@ def test_saved_default_offsets_survive_relaunch_without_centering_api():
     from pc.glassvr.grip import DEFAULT_GRIP_XYZW
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space']
     first,second=Space(cfg),Space(cfg)
-    assert not hasattr(first,'center_orientation') and not hasattr(first,'session_grip')
+    assert hasattr(first,'center_orientation') and not hasattr(first,'session_grip')
     assert not hasattr(first,'tip')
     for side in (1,2):
         np.testing.assert_allclose(first.grip[side].as_quat(),DEFAULT_GRIP_XYZW[side],atol=1e-15)

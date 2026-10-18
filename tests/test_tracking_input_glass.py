@@ -105,21 +105,23 @@ def test_controllers_follow_hmd_forward_and_room_transform_applies_once():
 def test_dual_xbox_layout_simultaneous_and_disconnect():
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
     out,events=m.update(Input(True,{'x','y','start','back','lb','rb','ls','rs'},.35,.8,(.2,-.3),(-.4,.5)))
-    assert events==[]
+    assert events==['center_start']
     for side in (1,2):
-        assert out[side]['b'] and out[side]['system'] and out[side]['joy_btn']
+        assert out[side]['b'] and not out[side]['system'] and out[side]['joy_btn']
         assert out[side]['grip_pull']==1
     assert out[1]['trigger']==.35 and out[2]['trigger']==.8
     assert out[1]['joy_x']==.2 and out[2]['joy_x']==-.4
     assert m.update(Input())[0]=={1:{},2:{}}
 
-def test_back_start_are_system_buttons_without_any_center_event():
+def test_back_start_hold_centers_until_release_without_system_buttons():
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text());m=Mapper(cfg['mapping'])
-    for keys in ({'back','start'},{'back','start'},{'start'},{'back'},set()):
+    for keys,expected in (({'back','start'},['center_start']),({'back','start'},[]),({'start'},['center_stop']),({'back'},[]),(set(),[])):
         buttons,events=m.update(Input(True,keys))
-        assert events==[]
-        assert buttons[1]['system']==('back' in keys)
-        assert buttons[2]['system']==('start' in keys)
+        assert events==expected
+        assert not buttons[1]['system'] and not buttons[2]['system']
+    for keys in ({'start'},{'back'}):
+        buttons,_=m.update(Input(True,keys))
+        assert buttons[1]['system']==('back' in keys) and buttons[2]['system']==('start' in keys)
 
 
 def test_fixed_grip_preserves_position_and_relative_hand_rotation():
@@ -135,7 +137,7 @@ def test_fixed_grip_preserves_position_and_relative_hand_rotation():
         np.testing.assert_allclose(actual.as_matrix(),(basis*delta*basis.inv()).as_matrix(),atol=1e-12)
 
 
-def test_controller_orientation_matches_captured_legacy_grip_composition():
+def test_grip_rounded_to_point_zero_five_stays_near_original_orientation():
     cfg=yaml.safe_load(Path('pc/config.yaml').read_text())['space'];s=Space(cfg)
     s.history.append((10,np.eye(3),np.zeros(3)))
     captured={1:[0.030236185580325748,0.33490344927214416,0.40456399430854934,0.8504430770229625],
@@ -145,7 +147,9 @@ def test_controller_orientation_matches_captured_legacy_grip_composition():
             palm=Rotation.from_euler('xyz',angles)
             _,q=s.transform(np.array([0,0,.5]),palm.as_quat(),10,side)
             expected=s.mount@palm.as_matrix()@Rotation.from_euler('x',90,degrees=True).as_matrix()@Rotation.from_quat(captured[side]).as_matrix()
-            np.testing.assert_allclose(Rotation.from_quat(q).as_matrix(),expected,atol=1e-12)
+            # Four components on a 0.05 grid introduce at most 0.05 total
+            # Euclidean quantization error before unit-quaternion normalization.
+            assert np.degrees((Rotation.from_matrix(expected).inv()*Rotation.from_quat(q)).magnitude()) < 6
 
 
 def test_duplicate_chirality_keeps_two_existing_roles():
