@@ -33,7 +33,7 @@ def update(ipa,dylib,settings,output):
                 written=set()
                 for entry in source.infolist():
                     if '/_CodeSignature/' in entry.filename or entry.filename.endswith('/embedded.mobileprovision'):continue
-                    if entry.filename==root+'/hand_landmarker.task' or entry.filename.startswith((root+'/hand_detector.mlmodelc/',root+'/hand_landmarks_detector.mlmodelc/')):continue
+                    if entry.filename==root+'/hand_landmarker.task' or entry.filename.startswith((root+'/hand_detector.mlmodelc/',root+'/hand_landmarks_detector.mlmodelc/',root+'/mobrecon.mlmodelc/')):continue
                     dest.writestr(entry,replacements.get(entry.filename,source.read(entry.filename)));written.add(entry.filename)
                 for name,data in replacements.items():
                     if name not in written:dest.writestr(name,data)

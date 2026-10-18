@@ -1,4 +1,12 @@
-# Third-party attribution
+# Third-party attribution — 2.6
+
+## MobRecon / HandMesh — Xingyu Chen and coauthors
+
+Official revision 3c87e958d4855f890e3884ec94bcfc0f99422c3d of https://github.com/SeanChenxy/HandMesh . Source MIT notice is retained in third_party/MobRecon-LICENSE.txt. The official 2023 DenseStack + SpiralConv demo checkpoint is SHA256-pinned in models/upstream.json. The Core ML graph retains the learned backbone, mesh decoder and joint regression. Integer-to-float clip casts and equivalent dense pooling are validated numerically; trained parameters are unchanged. FP32 export is used because FP16 failed the chosen parity tolerance.
+
+Topology/regressor derive from upstream template/transform.pkl, j_reg.npy and OpenMesh1.2.1 spiral extraction, length9/dilation1. MANO_RIGHT.pkl was not downloaded and no license agreement was accepted by automation. MIT integration/source does not replace any applicable model/weight or MANO asset terms; see https://mano.is.tue.mpg.de/ and upstream before further redistribution. Test photographs come from upstream cmr/images.
+
+## GlassVR — DaniXmir
 
 This project is based on **[GlassVR by DaniXmir](https://github.com/DaniXmir/GlassVr)**
 for SteamVR/OpenVR controller emulation. It does not introduce an independent
@@ -15,23 +23,14 @@ their authors' software; our MIT license does not relicense them. No upstream
 license file was found in the inspected checkout; see the upstream project for
 its distribution terms and contact its author for reuse permissions.
 
-**VRidge 2 / RiftCat** is proprietary third-party software. The unsigned modified
-IPA supplied in the release is based on the decrypted VRidge 2.7.8 IPA provided
-by the project owner. The owner explicitly requested distribution of the IPA in the main project
-release. The experimental client was tested by the owner before promotion to the main release. The original app is not authored or relicensed by
-this project. Its executable is preserved by the update process.
+## Earlier Core ML backend — Vimal Mollyn / Google MediaPipe
 
-**Google MediaPipe models**: stock fp16 palm/landmark weights, Apache-2.0; license in third_party/MediaPipe-LICENSE.txt. Two compiled Core ML models are bundled. MediaPipe Tasks SDK is not linked in 2.5. WHIM fine-tuned weights are not used. Assets and reference hashes are pinned in ios/fetch_dependencies.py.
+Vimal Mollyn's fasthands / Mediapipe-Hands-PyTorch-CoreML was the basis of the 2.5 backend. Its MIT notice remains in third_party/FastHands-LICENSE.txt. The Google MediaPipe Apache-2.0 notice remains in third_party/MediaPipe-LICENSE.txt for history. MediaPipe inference models and that pipeline are not included in the 2.6 IPA. Vision supplies only ROI and chirality; MobRecon supplies 3D.
 
-Windows bundles Python, NumPy, SciPy, PyYAML, zeroconf, OpenVR Python bindings and PyInstaller runtime components. Collected notices remain in _internal. Apple frameworks are system components, not redistributed binaries.
+## VRidge — RiftCat
 
-No affiliation with Valve, Apple, RiftCat, or DaniXmir is claimed.
+VRidge2.7.8 is proprietary and supplied by the owner as a decrypted IPA. The owner requested release distribution; our MIT license does not relicense the app or assert third-party rights. The original executable is preserved. App content, profiles and certificates are excluded from git/CI; unsigned IPA packaging occurs locally.
 
+## Dependencies
 
-**Vimal Mollyn — fasthands / Core ML port.** The native pipeline is adapted from Vimal Mollyn's
-Mediapipe-Hands-PyTorch-CoreML / fasthands (MIT), pinned revision
-565d188 (full hash in ios/fetch_dependencies.py). License is preserved in
-third_party/FastHands-LICENSE.txt. The bundled stock fp16 model weights are
-Google MediaPipe weights (Apache-2.0); WHIM fine-tuned weights are not used.
-The author reports performance on M4; this project does not claim those
-measurements apply to iPhone 16 or two-hand tracking beside VRidge.
+Windows bundles Python, NumPy, SciPy, PyYAML, zeroconf, OpenVR bindings and PyInstaller components; collected notices remain in _internal. Apple Vision/Core ML/AVFoundation are system frameworks, not redistributed framework binaries. No affiliation with Apple, Valve, RiftCat or the upstream authors is claimed.

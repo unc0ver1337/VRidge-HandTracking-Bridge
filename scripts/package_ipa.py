@@ -9,7 +9,7 @@ from pathlib import Path
 LOAD_PATH='@executable_path/Frameworks/VRidgeHandTracking.dylib'
 
 def coreml_info(info):
-    info['CFBundleDisplayName']='VRidge Hand Tracking 2.5.1'
+    info['CFBundleDisplayName']='VRidge Hand Tracking 2.6'
     info['NSCameraUsageDescription']='Ultra-wide camera tracks your hands with Core ML while VRidge streams VR.'
     info['NSLocalNetworkUsageDescription']='Find the GlassVR iPhone Bridge and stream hand tracking.'
     info['NSBonjourServices']=sorted((set(info.get('NSBonjourServices',[]))-{'_vhbridge._udp'})|{'_mpbridge._udp'})
@@ -18,7 +18,7 @@ def coreml_info(info):
 
 def model_resources(build):
     build=Path(build);resources={}
-    for name in ('hand_detector','hand_landmarks_detector'):
+    for name in ('mobrecon',):
         model=build/(name+'.mlmodelc')
         if not (model/'coremldata.bin').is_file():raise ValueError('missing compiled model '+name)
         for path in model.rglob('*'):
@@ -76,6 +76,8 @@ def package(ipa,dylib,output,settings,identity=None,profile=None,entitlements=No
         frameworks=app/'Frameworks'; frameworks.mkdir(exist_ok=True)
         shutil.copy2(dylib,frameworks/'VRidgeHandTracking.dylib'); shutil.copy2(settings,app/'VHBridge.plist')
         (app/'hand_landmarker.task').unlink(missing_ok=True)
+        for name in ('hand_detector.mlmodelc','hand_landmarks_detector.mlmodelc','mobrecon.mlmodelc'):
+            if (app/name).exists():shutil.rmtree(app/name)
         for name,data in model_resources(Path(dylib).parent).items():
             target=app/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
         coreml_info(info)

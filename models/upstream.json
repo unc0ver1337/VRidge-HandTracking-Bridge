@@ -1,0 +1,15 @@
+{
+  "upstream": "SeanChenxy/HandMesh",
+  "commit": "3c87e958d4855f890e3884ec94bcfc0f99422c3d",
+  "checkpoint_drive_id": "1QKtt5x-8Xe_afjpMTBIk2TI3G5QGk_iu",
+  "checkpoint_sha256": "2b634114dadb324802c9e55a8b7a9236f0e7b476157ac0b175f0eb258d9d276c",
+  "sources": {
+    "cmr/models/mobrecon_densestack.py": "5b861466a73c2310e440318021e1089a36b203a6287adc963d95cf0ace751741",
+    "mobrecon/models/densestack.py": "fb4147f4d01188298cbd70f51007b9ba3d2bb80e09e77da9fc4811d11ff143e1",
+    "mobrecon/models/modules.py": "0dff5773e5880c7fba44804a85c10016386cdd3795aecde085240c7e9fe8925d",
+    "conv/spiralconv.py": "a09073f760ee65874093ba58e54aa8fd1994a8f485892a9e6a44603121a028e4",
+    "conv/dsconv.py": "d9a4c2ae0c01736d03f484424512e72eeab558a319014226551b6065c1b4a4c1",
+    "conv/__init__.py": "b1dfe29f8e41af7b45492aa3f0ca1bf32144f7ebed7013bfe38ce1ae853c28a7"
+  },
+  "topology_sha256": "8d6006176d618a4496dfab47d929228a67c402b971acee0deed2a229d72927e3"
+}

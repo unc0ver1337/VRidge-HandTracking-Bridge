@@ -1,39 +1,7 @@
-# Проверки версии 2.5.1
+# Validation — 2.6 MobRecon
 
-62 Python-тестов: MPBR/v2, malformed/stale/reordered/lost packets, handshake,
-clock sync, multi-adapter discovery, декодирование телефонной 3D pose,
-оба semantic roles, flicker handedness, недопустимые quaternion/координаты,
-исчезновение пальца и истечение hold, фильтры и reacquisition, Xbox mapping,
-фиксированный хват, отсутствие центровки Back+Start, raw HMD transform, GlassVR wire/skeleton bounds, упаковка IPA.
-Старый Vision solver и его тесты удалены. Synthetic Model находится только
-в tests/geometry.py для тестовых данных; runtime её не импортирует.
+65 Python tests cover MPBR protocol, sequence/loss/discovery, PC pose decoding, filters, Xbox input, fixed grip, packaging, upstream hashes, topology and joint order. Native C++ checks cover ROI/crop/mirroring and980 synthetic camera translations. Conversion checks strict official checkpoint loading, sparse/dense pooling equivalence and PyTorch/Core ML output parity on three real upstream demo images and their mirrors. Native smoke executes Vision+MobRecon on original/mirrored and paired two-hand images on macOS CPU_ONLY.
 
-Native C++ тест использует production TranslationFit.h: 980 синтетических поз
-с поворотами, разными расстояниями и смещениями; NaN/вырожденные лучи/невалидные
-intrinsics. Это тест математики, не оценка точности нейросети.
+The owner confirmed the MobRecon experimental IPA tracked substantially better. This is user observation, not an objective accuracy/FPS/heat measurement, and does not replace installation/runtime testing of the final2.6 package. Final CI builds Windows EXE and ARM64 dylib/models; packaged EXE is invoked only for --help/--version. IPA verification preserves original executable/ID/URL schemes, replaces old models, checks model/dylib identity and unsigned state. No tracker/SteamVR runtime is started for release preparation.
 
-`python -m scripts.smoke_network` проверяет Bonjour + hello + clock sync +
-synthetic 3D packet + GlassVR wire на loopback. SteamVR/камеру не запускает.
-Loopback RTT нельзя принимать за задержку телефона.
-
-CI собирает ARM64 dylib (ad-hoc codesign verify/load commands) и Windows EXE
-(--help). Упаковка unsigned IPA проверяет executable, compiled models, dylib,
-bundle ID и удаление прежних подписей. Это не проверка установки на iPhone.
-
-Пользователь подтвердил улучшение Core ML preview на iPhone 16 / iOS 18.5.
-Финальная 2.5.1 требует повторной аппаратной проверки:
-
-1. Установить новую IPA, разрешить Camera/Local Network, запустить только новый bridge.
-2. Проверить VRidge stream, discovery в обычной сети и точке доступа ПК.
-3. Показать левую/правую руку и обе; проверить стороны при скрещивании.
-4. Повернуть ладони к камере, от камеры, ребром; согнуть каждый палец/кулак.
-5. Проверить приближение/удаление, вращение головы, сохранение хвата после перезапуска и независимые System Back/Start.
-6. Убрать/вернуть руки, отключить/вернуть сеть и Xbox.
-7. Проверить 10–15 минут: реальные FPS, capture-to-output с погрешностью clock
-   sync, packet loss, rejected, нагрев. Сохранить bridge.log при сбое.
-
-Сервер, SteamVR и VRidge при сборке/упаковке автоматически не запускаются.
-
-CI additionally compares production CoreMLMath.h against pinned fasthands: 100 ROI cases and 16 image crops. Native CoreMLTracker inference is compared on macOS CPU_ONLY against upstream Python on original/mirrored photos and a two-hand collage, three frames each. This tests port parity, not model accuracy or iPhone/ANE speed. Measured JSON is included at iOS/library/coreml-parity.json in the release ZIP.
-
-2.5.1: поправки обеих рук извлечены read-only из session_grip работающего bridge 2.5, повторное чтение дало те же значения. Тесты проверяют точное совпадение композиции с прежней сессией, сохранение положения/относительного вращения и независимые кнопки Back/Start. Финальный EXE 2.5.1 не запускался для аппаратного трекинга.
+On iPhone16/iOS18.5 verify Camera/Local Network permissions, concurrent VRidge stream, both hands and semantic roles, palm/back/edge rotations, fingers and Joy-Con occlusion, distances/head motion, fixed grip persistence, ordinary Back/Start System behavior, network/Xbox disconnection and sustained heat/FPS. Save bridge.log on failure. The fixed grip from2.5.1 is unchanged and manual centering remains removed.
