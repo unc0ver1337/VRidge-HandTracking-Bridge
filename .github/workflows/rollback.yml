@@ -16,13 +16,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
+          token: ${{ secrets.ROLLBACK_TOKEN }}
 
-      - name: Backup current version
+      - name: Backup version 2.6
         run: |
           git push origin HEAD:refs/heads/backup-before-rollback
 
-      - name: Rollback to version 2.5.1
+      - name: Restore version 2.5.1
         run: |
           git reset --hard cd3c8d72c0f4d6cfbc2044252da6a51448c9220e
           git push --force origin HEAD:main
