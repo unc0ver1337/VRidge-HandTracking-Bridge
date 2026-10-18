@@ -104,10 +104,25 @@ class DriverManager:
 
     def ensure_and_wait(self):
         self.configure_channels()
+        self.configure_multiple_drivers()
         if not self.registered():
             self.install()
         else: LOG.info('GlassVR driver already registered: %s',self.registered())
         self.wait_for_steamvr()
+
+    def configure_multiple_drivers(self):
+        configs=self.paths().get('config',[])
+        if not configs:raise RuntimeError('SteamVR config path missing. Run SteamVR once before installation.')
+        path=Path(configs[0])/'steamvr.vrsettings'
+        data=json.loads(path.read_text(encoding='utf8')) if path.exists() else {}
+        settings=data.setdefault('steamvr',{})
+        if settings.get('activateMultipleDrivers') is True:return
+        if path.exists():shutil.copy2(path,path.with_name('steamvr.before-vridge-bridge.vrsettings'))
+        settings['activateMultipleDrivers']=True
+        path.parent.mkdir(parents=True,exist_ok=True)
+        temporary=path.with_name('steamvr.bridge-install.tmp')
+        temporary.write_text(json.dumps(data,indent=2),encoding='utf8');os.replace(temporary,path)
+        LOG.info('Enabled SteamVR multiple drivers for VRidge HMD + GlassVR controllers')
 
     def configure_channels(self,path=None):
         path=Path(path) if path else Path(os.environ.get('APPDATA',''))/'glassvr/settings.json'

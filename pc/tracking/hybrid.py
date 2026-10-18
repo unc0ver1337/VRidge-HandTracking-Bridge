@@ -24,6 +24,7 @@ class Decoder:
 
     def decode(self, hand, side, frame):
         started = time.perf_counter()
+        if not frame.flags & 2: raise ValueError('hybrid Vision frame required')
         points = np.asarray(hand.points, dtype=float)
         if side not in (1, 2) or points.shape != (21, 3): raise ValueError('Vision hand shape')
         if not np.isfinite(points).all() or np.min(points[IDS, 2]) < .35: raise ValueError('Vision palm occluded')

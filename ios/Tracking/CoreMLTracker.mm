@@ -77,7 +77,7 @@ struct PixelLock {
         if(raw[1][0]<=.5f)continue;
         auto hand=project(raw[0].data(),raw[3].data(),.5f,r);
         // Side belongs to the matching Vision ROI, never to a separate detector.
-        hand.side=region.side;hands.push_back(hand);
+        hand.side=region.side;hand.identity=region.identity;hands.push_back(hand);
     }return hands;
 }
 - (void)reset {_tracked.clear();_lastCapture=0;}

@@ -18,12 +18,12 @@ its distribution terms and contact its author for reuse permissions.
 **VRidge 2 / RiftCat** is proprietary third-party software. The unsigned modified
 IPA supplied in the release is based on the decrypted VRidge 2.7.8 IPA provided
 by the project owner. The owner explicitly requested distribution of the IPA in the main project
-release. The experimental client was tested by the owner before promotion to the main release. The original app is not authored or relicensed by
+release. Earlier backends were tested by the owner; the new Vision hybrid still requires device validation. The original app is not authored or relicensed by
 this project. Its executable is preserved by the update process.
 
-**Google MediaPipe models**: stock fp16 palm/landmark weights, Apache-2.0; license in third_party/MediaPipe-LICENSE.txt. Two compiled Core ML models are bundled. MediaPipe Tasks SDK is not linked in 2.5. WHIM fine-tuned weights are not used. Assets and reference hashes are pinned in ios/fetch_dependencies.py.
+**Google MediaPipe models**: stock fp16 palm/landmark weights, Apache-2.0; license in third_party/MediaPipe-LICENSE.txt. Two compiled Core ML models are bundled for reproducible parity tests; hybrid runtime loads only the landmark model. MediaPipe Tasks SDK is not linked. WHIM fine-tuned weights are not used. Assets and reference hashes are pinned in ios/fetch_dependencies.py.
 
-Windows bundles Python, NumPy, SciPy, PyYAML, zeroconf, OpenVR Python bindings and PyInstaller runtime components. Collected notices remain in _internal. Apple frameworks are system components, not redistributed binaries.
+Windows bundles Python, OpenCV, NumPy, SciPy, PyYAML, zeroconf, OpenVR Python bindings and PyInstaller runtime components. Collected notices remain in _internal. Apple frameworks are system components, not redistributed binaries.
 
 No affiliation with Valve, Apple, RiftCat, or DaniXmir is claimed.
 

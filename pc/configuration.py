@@ -1,4 +1,4 @@
-"""Load network/input configuration; grip offsets are fixed in glassvr.grip."""
+"""Load network/input/geometry configuration. Grip can be re-centered separately."""
 from pathlib import Path
 import yaml
 

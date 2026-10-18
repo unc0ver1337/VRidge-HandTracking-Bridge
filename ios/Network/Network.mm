@@ -38,7 +38,7 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
         self->_searchStart=ClockNow(); self->_deadline=[self->_settings[@"DiscoveryTimeoutSeconds"] doubleValue]?:15;
         self->_deadline=MAX(1,MIN(120,self->_deadline));
         self->_timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,self->_queue);
-        dispatch_source_set_timer(self->_timer,DISPATCH_TIME_NOW,100*NSEC_PER_MSEC,10*NSEC_PER_MSEC);
+        dispatch_source_set_timer(self->_timer,DISPATCH_TIME_NOW,20*NSEC_PER_MSEC,2*NSEC_PER_MSEC);
         __weak VHNetwork *weak=self;
         dispatch_source_set_event_handler(self->_timer,^{[weak tick];}); dispatch_resume(self->_timer);
         [self emit:@"Searching for PC"];
@@ -90,7 +90,10 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
         if(![o isKindOfClass:NSDictionary.class]||![o[@"protocol"] isEqual:@"MPBR"]||[o[@"v"] intValue]!=3)continue;
         if([o[@"type"] isEqual:@"welcome"]&&[o[@"nonce"] isEqual:_nonce]&&[o[@"session"] isKindOfClass:NSNumber.class]){
             _session=[o[@"session"] unsignedLongLongValue]; _lastReply=now;
-            if(!_connected){[self emit:@"Connected to PC"]; [self setConnected:YES];}
+            if(!_connected){
+                [self emit:@"Connected to PC"]; [self setConnected:YES];
+                [self json:@{@"type":@"ping",@"session":@(_session),@"t0":@(ClockNow())}];
+            }
         }else if([o[@"type"] isEqual:@"pong"]&&[o[@"session"] unsignedLongLongValue]==_session){
             _lastReply=now;
             if(o[@"t0"]&&o[@"s1"]&&o[@"s2"])[self json:@{@"type":@"sync",@"session":@(_session),@"t0":o[@"t0"],@"t3":@(ClockNow()),@"s1":o[@"s1"],@"s2":o[@"s2"]}];
@@ -110,9 +113,9 @@ static double ClockNow(){ return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostT
         }
         return;
     }
-    // 500ms control cadence, receive polling stays 100ms.
+    // 500ms control cadence; 20ms receive polling reduces clock-sync polling error.
     static unsigned tick=0;
-    if((tick++%5)==0){
+    if((tick++%25)==0){
         if(_connected)[self json:@{@"type":@"ping",@"session":@(_session),@"t0":@(ClockNow())}];
         else [self json:@{@"type":@"hello",@"nonce":_nonce,@"device":UIDevice.currentDevice.name}];
     }

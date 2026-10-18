@@ -8,7 +8,9 @@ def assemble(destination):
     pin=json.loads((ROOT/'third_party/GlassVR-assets.json').read_text())
     for name,sha in pin['files'].items():
         dest=destination/name
-        if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest()==sha:continue
+        accepted={sha}
+        if name=='bin/win64/driver_glassvr.dll':accepted.add(pin['patched_dll_sha256'])
+        if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() in accepted:continue
         url='https://raw.githubusercontent.com/DaniXmir/GlassVr/'+pin['upstream_commit']+'/code-glassvrserver/assets/driver%20to%20copy/glassvrdriver/'+urllib.parse.quote(name)
         data=urllib.request.urlopen(url,timeout=120).read()
         if hashlib.sha256(data).hexdigest()!=sha:raise ValueError('GlassVR asset mismatch '+name)

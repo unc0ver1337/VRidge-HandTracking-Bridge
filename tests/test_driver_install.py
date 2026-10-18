@@ -18,6 +18,7 @@ def layout(tmp_path):
             data=json.loads(paths.read_text());data['external_drivers'].remove(args[-1]);paths.write_text(json.dumps(data))
     manager=DriverManager(paths,source,tmp_path/'managed/glassvrdriver',run,lambda _:None)
     manager.configure_channels=lambda:None
+    manager.configure_multiple_drivers=lambda:None
     return manager,calls
 
 def test_absent_driver_installs_then_waits_without_launching_steam(tmp_path):
@@ -45,3 +46,27 @@ def test_missing_bundle_or_runtime_never_closes_steam(tmp_path):
 def test_cleanup_cannot_remove_outside_managed_staging(tmp_path):
     m,_=layout(tmp_path)
     with pytest.raises(ValueError):m.remove_staging(tmp_path)
+
+def test_fresh_udp_settings_and_multiple_driver_configuration_preserve_other_values(tmp_path):
+    m,_=layout(tmp_path);settings=tmp_path/'settings.json'
+    settings.write_text(json.dumps({'cl port':9123,'unrelated':'keep'}))
+    DriverManager.configure_channels(m,settings)
+    data=json.loads(settings.read_text())
+    assert data['cl port']==9123 and data['cr port']==9001
+    assert data['unrelated']=='keep' and data['clskeletal mode']=='UDP'
+    assert data['enable cl'] and not data['tracking cl'] and not data['enable hmd']
+    assert json.loads(settings.with_name('settings.before-bridge.json').read_text())['unrelated']=='keep'
+    config=tmp_path/'config';config.mkdir();vr=config/'steamvr.vrsettings'
+    vr.write_text(json.dumps({'steamvr':{'custom':1},'other':True}))
+    paths=m.paths();paths['config']=[str(config)];m.paths_file.write_text(json.dumps(paths))
+    DriverManager.configure_multiple_drivers(m)
+    saved=json.loads(vr.read_text());assert saved['steamvr']=={'custom':1,'activateMultipleDrivers':True} and saved['other']
+
+def test_internal_driver_is_backed_up_on_uninstall_not_left_active(tmp_path):
+    m,calls=layout(tmp_path);runtime=Path(m.paths()['runtime'][0]);inside=runtime/'drivers/glassvrdriver'
+    import shutil
+    shutil.copytree(m.bundled,inside);closed=[];m.shutdown_steam=lambda:closed.append(True)
+    m.uninstall()
+    assert closed==[True] and not inside.exists() and not m.registered()
+    assert any(m.valid(p) for p in m.managed.parent.glob('uninstalled-*'))
+    assert not calls

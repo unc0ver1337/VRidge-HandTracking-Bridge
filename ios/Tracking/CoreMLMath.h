@@ -12,7 +12,7 @@ constexpr float pi=3.14159265358979323846f;
 struct Point {float x=0,y=0,z=0;};
 struct Rect {float cx,cy,w,h,rotation;}; // Normalized image coordinates.
 struct Detection {float x,y,w,h,score;std::array<Point,7> kp;};
-struct Hand {std::array<Point,21> landmarks,world;int side=0;float score=0;};
+struct Hand {std::array<Point,21> landmarks,world;int side=0;float score=0;uint32_t identity=0;};
 inline float radians(float x){return x-2*pi*std::floor((x+pi)/(2*pi));}
 inline std::vector<Point> anchors(){
     std::vector<Point> out;out.reserve(2016);

@@ -20,3 +20,6 @@ dist/
 ios/deps/
 ios/assets/
 *.xcframework/
+
+vision-hybrid-centering.json
+*.installing/

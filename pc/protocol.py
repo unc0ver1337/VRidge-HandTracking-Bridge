@@ -1,4 +1,4 @@
-"""Little-endian wire format shared with ios/Network/Wire.h. Max 1144 bytes."""
+"""MPBR/v3 shared with ios/Network/Wire.h. Max 1160 bytes, two hands."""
 from dataclasses import dataclass
 import struct
 import numpy as np
@@ -14,7 +14,7 @@ class Hand:
     track_id: int
     side: int  # 0 unknown, 1 left, 2 right
     palm: int  # 0 unknown, +/-1 heuristic only, never a hard constraint
-    points: np.ndarray  # x right, y down, availability (not joint confidence)
+    points: np.ndarray  # x right, y down, Vision per-joint confidence
     world: np.ndarray = None
     position: np.ndarray = None
     quaternion: np.ndarray = None

@@ -21,6 +21,8 @@
     std::atomic_bool _fingerBusy; double _lastFinger;
     struct FingerSample {corehands::Hand hand;double capture;corehands::Point wrist;};
     std::mutex _fingerMutex;std::map<int,FingerSample> _fingers;
+    struct Track {corehands::Point wrist;double capture;int side;};
+    std::map<uint32_t,Track> _tracks;uint32_t _nextTrack=1;
     NSDictionary *_settings; std::atomic_bool _busy; std::atomic_bool _wanted;
     uint32_t _sequence;
     CVPixelBufferPoolRef _pool; int _width,_height;
@@ -116,7 +118,7 @@
     // Only this tweak's own session. Existing host capture sessions are observed,
     // never stopped, swizzled, or reconfigured.
     [_session stopRunning]; _session=nil; _camera=nil;
-    dispatch_sync(_inferenceQueue,^{});
+    dispatch_sync(_inferenceQueue,^{self->_tracks.clear();});
     dispatch_sync(_fingerQueue,^{[self->_request reset];});
     {std::lock_guard<std::mutex> lock(_fingerMutex);_fingers.clear();}_lastFinger=0;
     if(_pool){CVPixelBufferPoolRelease(_pool);_pool=nullptr;}
@@ -186,12 +188,31 @@
         BOOL ok=[handler performRequests:@[self->_vision] error:&error];
         std::vector<corehands::Hand> regions;std::vector<VHHand> records;
         NSArray<VNHumanHandPoseObservation *> *observations=self->_vision.results;
+        for(auto i=self->_tracks.begin();i!=self->_tracks.end();){
+            if(header.capture-i->second.capture>.7)i=self->_tracks.erase(i);else ++i;
+        }
+        {std::lock_guard<std::mutex> lock(self->_fingerMutex);
+            for(auto i=self->_fingers.begin();i!=self->_fingers.end();){
+                if(header.capture-i->second.capture>.35)i=self->_fingers.erase(i);else ++i;
+            }
+        }
+        std::vector<uint32_t> used;
         if(ok)for(const auto&record:hybrid::extract(observations)){
-            VHHand hand=record.wire;const auto&region=record.region;
+            VHHand hand=record.wire;auto region=record.region;
+            float best=.32f;uint32_t identity=0;
+            for(const auto&track:self->_tracks){
+                if(std::find(used.begin(),used.end(),track.first)!=used.end())continue;
+                float dx=region.landmarks[0].x-track.second.wrist.x,dy=region.landmarks[0].y-track.second.wrist.y;
+                float cost=std::hypot(dx,dy)+(hand.side==track.second.side?0:.06f);
+                if(cost<best){best=cost;identity=track.first;}
+            }
+            if(!identity)identity=self->_nextTrack++;
+            used.push_back(identity);hand.identity=identity;region.identity=identity;
+            self->_tracks[identity]={region.landmarks[0],header.capture,hand.side};
             // The cache is stamped with the inference SOURCE frame. A result is
             // never labelled as current just because it completed this frame.
             {std::lock_guard<std::mutex> lock(self->_fingerMutex);
-                auto found=self->_fingers.find(hand.side);
+                auto found=self->_fingers.find(hand.identity);
                 if(found!=self->_fingers.end()){
                     const auto&f=found->second;
                     double age=header.capture-f.capture;
@@ -211,15 +232,17 @@
         NSMutableData *data=[NSMutableData dataWithBytes:&h length:sizeof(h)];
         for(const auto&hand:records)[data appendBytes:&hand length:sizeof(hand)];
         if(self.frame&&self->_wanted)self.frame(data);
-        if(ok&&!regions.empty()&&header.capture-self->_lastFinger>=1./15.&&!self->_fingerBusy.exchange(true)){
+        NSProcessInfoThermalState thermal=NSProcessInfo.processInfo.thermalState;
+        double fingerFPS=thermal>=NSProcessInfoThermalStateCritical?5.:(thermal>=NSProcessInfoThermalStateSerious?10.:15.);
+        if(ok&&!regions.empty()&&header.capture-self->_lastFinger>=1./fingerFPS&&!self->_fingerBusy.exchange(true)){
             self->_lastFinger=header.capture;CVPixelBufferRetain(scaled);
             dispatch_async(self->_fingerQueue,^{@autoreleasepool {
                 NSError *fingerError=nil;
                 if(self->_wanted&&self->_request){
                     auto results=[self->_request fingers:scaled regions:regions error:&fingerError];
                     if(!fingerError){std::lock_guard<std::mutex> lock(self->_fingerMutex);
-                        for(const auto&hand:results)for(const auto&region:regions)if(hand.side==region.side){
-                            self->_fingers[hand.side]={hand,header.capture,region.landmarks[0]};break;
+                        for(const auto&hand:results)for(const auto&region:regions)if(hand.identity==region.identity){
+                            self->_fingers[hand.identity]={hand,header.capture,region.landmarks[0]};break;
                         }
                     }else NSLog(@"Finger inference: %@",fingerError);
                 }
