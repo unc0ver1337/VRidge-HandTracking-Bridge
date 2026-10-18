@@ -1,8 +1,8 @@
 {
   "upstream_commit": "4d530752a52febb39a3cb9ade3632e4c2ce77425",
   "files": {
-    "driver.vrdrivermanifest": "fe09df3cbb6f9b107fe0a7634fec061a56a34c0996f44ed23aa510aee6700f58",
-    "resources/settings/driver.vrsettings": "c74a81ea62289a9c110b54335fa2f15bbb26e5d67a5e9d06e16c4d06888c8e4a",
+    "driver.vrdrivermanifest": "a968a320439b45d207ef080e1bbd738d978dee28b6f247856ddda8f3c451ab3e",
+    "resources/settings/driver.vrsettings": "a687ae34e7787979793951f7b5c439460eaf1d652eaa870595c11860fdc0c506",
     "bin/win64/carina_vio.dll": "3959e711015a4b19c021286e79eded24652c15e51672c38023eba822d96a4b6b",
     "bin/win64/driver_glassvr.dll": "448eb2ae8dc8c5a135efff8f2d43062033af9e5e5327f05e8ff4e71edb9f2246",
     "bin/win64/glasses.dll": "22fcde41eabe55a20a827d99f0e51beaa9e0516776eada7890d10f19aee09f4a",

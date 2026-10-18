@@ -51,6 +51,8 @@ jobs:
         run: python tests/check_coreml_math.py
       - name: Compare native Core ML inference against upstream Python
         run: python tests/check_coreml_inference.py | tee ios/build/coreml-parity.json
+      - name: Run production Vision ROI to Core ML fingers on real photos
+        run: python tests/check_hybrid_inference.py
       - name: Verify ARM64 load commands
         run: |
           file ios/build/VRidgeHandTracking.dylib
@@ -66,4 +68,5 @@ jobs:
             ios/build/load-commands.txt
             ios/build/SHA256SUMS
             ios/build/coreml-parity.json
+            ios/build/hybrid-smoke.json
           retention-days: 14

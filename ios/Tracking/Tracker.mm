@@ -5,7 +5,7 @@
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
 #import <simd/simd.h>
-#import <Vision/Vision.h>
+#import "VisionHands.h"
 #include <mutex>
 #include <map>
 #include <atomic>
@@ -85,7 +85,9 @@
         if(v<score){score=v; best=format;bestFPS=MIN(desired,maxFPS);}
     }
     if(!best||![_camera lockForConfiguration:&error]){[s commitConfiguration];[self emit:error.localizedDescription?:@"No compatible capture format"];return;}
-    _camera.activeFormat=best; _camera.activeVideoMinFrameDuration=CMTimeMake(1,(int32_t)bestFPS); _camera.activeVideoMaxFrameDuration=CMTimeMake(1,(int32_t)bestFPS);
+    _camera.activeFormat=best;
+    if(_camera.geometricDistortionCorrectionSupported)_camera.geometricDistortionCorrectionEnabled=YES;
+    _camera.activeVideoMinFrameDuration=CMTimeMake(1,(int32_t)bestFPS); _camera.activeVideoMaxFrameDuration=CMTimeMake(1,(int32_t)bestFPS);
     [_camera unlockForConfiguration];
     AVCaptureVideoDataOutput *out=[AVCaptureVideoDataOutput new]; out.alwaysDiscardsLateVideoFrames=YES;
     out.videoSettings=@{(id)kCVPixelBufferPixelFormatTypeKey:@(kCVPixelFormatType_32BGRA)};
@@ -174,7 +176,7 @@
         header.fx=k.columns[0][0]*scale;header.fy=k.columns[1][1]*scale;
         header.cx=k.columns[2][0]*scale+ox; header.cy=k.columns[2][1]*scale+oy;
     }else{
-        header.flags|=1;float f=(float)(sw/(2*tan(_camera.activeFormat.videoFieldOfView*M_PI/360)));
+        header.flags|=1;float f=(float)(sw/(2*tan((_camera.geometricDistortionCorrectionEnabled?_camera.activeFormat.geometricDistortionCorrectedVideoFieldOfView:_camera.activeFormat.videoFieldOfView)*M_PI/360)));
         header.fx=header.fy=f*scale;header.cx=_width*.5;header.cy=_height*.5;
     }
     dispatch_async(_inferenceQueue,^{ @autoreleasepool {
@@ -184,28 +186,8 @@
         BOOL ok=[handler performRequests:@[self->_vision] error:&error];
         std::vector<corehands::Hand> regions;std::vector<VHHand> records;
         NSArray<VNHumanHandPoseObservation *> *observations=self->_vision.results;
-        static NSArray<VNHumanHandPoseObservationJointName> *names;
-        static dispatch_once_t once;dispatch_once(&once,^{names=@[
-            VNHumanHandPoseObservationJointNameWrist,
-            VNHumanHandPoseObservationJointNameThumbCMC,VNHumanHandPoseObservationJointNameThumbMP,VNHumanHandPoseObservationJointNameThumbIP,VNHumanHandPoseObservationJointNameThumbTip,
-            VNHumanHandPoseObservationJointNameIndexMCP,VNHumanHandPoseObservationJointNameIndexPIP,VNHumanHandPoseObservationJointNameIndexDIP,VNHumanHandPoseObservationJointNameIndexTip,
-            VNHumanHandPoseObservationJointNameMiddleMCP,VNHumanHandPoseObservationJointNameMiddlePIP,VNHumanHandPoseObservationJointNameMiddleDIP,VNHumanHandPoseObservationJointNameMiddleTip,
-            VNHumanHandPoseObservationJointNameRingMCP,VNHumanHandPoseObservationJointNameRingPIP,VNHumanHandPoseObservationJointNameRingDIP,VNHumanHandPoseObservationJointNameRingTip,
-            VNHumanHandPoseObservationJointNameLittleMCP,VNHumanHandPoseObservationJointNameLittlePIP,VNHumanHandPoseObservationJointNameLittleDIP,VNHumanHandPoseObservationJointNameLittleTip];});
-        if(ok)for(VNHumanHandPoseObservation *observation in observations){
-            VHHand hand={};corehands::Hand region;
-            hand.side=observation.chirality==VNChiralityLeft?1:(observation.chirality==VNChiralityRight?2:0);
-            if(!hand.side)continue;hand.identity=hand.side;hand.rotation[3]=1;region.side=hand.side;
-            auto points=[observation recognizedPointsForGroupKey:VNHumanHandPoseObservationJointsGroupNameAll error:&error];
-            bool palmValid=true;
-            for(int j=0;j<21;j++){
-                VNRecognizedPoint *point=points[names[j]];
-                float x=point?point.location.x:0,y=point?1-point.location.y:0,c=point?point.confidence:0;
-                hand.landmarks[j][0]=std::clamp(x,0.f,1.f);hand.landmarks[j][1]=std::clamp(y,0.f,1.f);hand.landmarks[j][2]=std::clamp(c,0.f,1.f);
-                region.landmarks[j]={x,y,0};
-                if((j==0||j==5||j==9||j==13||j==17)&&c<.35f)palmValid=false;
-            }
-            if(!palmValid)continue;
+        if(ok)for(const auto&record:hybrid::extract(observations)){
+            VHHand hand=record.wire;const auto&region=record.region;
             // The cache is stamped with the inference SOURCE frame. A result is
             // never labelled as current just because it completed this frame.
             {std::lock_guard<std::mutex> lock(self->_fingerMutex);
